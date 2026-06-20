@@ -13,7 +13,13 @@ import { AVATAR_MAP } from '@/lib/avatars'
 // -----------------------------------------------------------------------------
 
 export async function loginAction(email: string, password: string): Promise<{ ok: true } | { ok: false; error: string }> {
-  const user = await db.user.findUnique({ where: { email: email.toLowerCase().trim() } })
+  const normalizedEmail = email.toLowerCase().trim()
+  if (!normalizedEmail || !password) return { ok: false, error: 'Email and password required.' }
+  // Basic email format check
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+    return { ok: false, error: 'Invalid email format.' }
+  }
+  const user = await db.user.findUnique({ where: { email: normalizedEmail } })
   if (!user) return { ok: false, error: 'No account with that email.' }
   if (!verifyPassword(password, user.passwordHash)) return { ok: false, error: 'Wrong password.' }
   await createSession(user.id)
@@ -38,6 +44,7 @@ export async function updateProfileAction(input: { nickname: string; avatarId: s
   const user = await requireUser()
   const trimmed = input.nickname.trim()
   if (trimmed.length < 2) return { ok: false, error: 'Nickname must be at least 2 characters.' }
+  if (trimmed.length > 32) return { ok: false, error: 'Nickname too long (max 32 chars).' }
   if (!AVATAR_MAP[input.avatarId]) return { ok: false, error: 'Unknown avatar.' }
 
   await db.user.update({
@@ -72,18 +79,25 @@ export async function createUserAction(input: {
 }): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
   await requireRole('admin')
   const email = input.email.toLowerCase().trim()
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return { ok: false, error: 'Invalid email format.' }
+  }
   if (await db.user.findUnique({ where: { email } })) {
     return { ok: false, error: 'Email already in use.' }
   }
-  if (input.password.length < 6) return { ok: false, error: 'Password must be at least 6 characters.' }
+  if (input.password.length < 8) return { ok: false, error: 'Password must be at least 8 characters.' }
+  if (input.nickname.trim().length < 2) return { ok: false, error: 'Nickname must be at least 2 characters.' }
+  if (!['admin', 'instructor', 'student'].includes(input.role)) return { ok: false, error: 'Invalid role.' }
+  if (input.avatarId && !AVATAR_MAP[input.avatarId]) return { ok: false, error: 'Invalid avatar.' }
+
   const user = await db.user.create({
     data: {
       email,
       passwordHash: hashPassword(input.password),
       role: input.role,
-      nickname: input.nickname.trim(),
-      realName: input.realName?.trim() || null,
-      studentId: input.studentId?.trim() || null,
+      nickname: input.nickname.trim().slice(0, 32),
+      realName: input.realName?.trim().slice(0, 100) || null,
+      studentId: input.studentId?.trim().slice(0, 50) || null,
       avatarId: input.avatarId ?? 'avatar-01',
     },
   })
@@ -243,7 +257,9 @@ export async function createMilestoneAction(input: {
   if (!canCreate) return { ok: false, error: 'Not authorized to create milestones in this domain.' }
 
   if (input.title.trim().length < 3) return { ok: false, error: 'Title must be at least 3 characters.' }
+  if (input.title.length > 200) return { ok: false, error: 'Title too long (max 200 chars).' }
   if (input.promptTemplate.trim().length < 10) return { ok: false, error: 'Prompt template is too short.' }
+  if (input.promptTemplate.length > 50000) return { ok: false, error: 'Prompt template too long (max 50000 chars).' }
 
   const milestone = await db.milestone.create({
     data: {
@@ -375,6 +391,32 @@ export async function submitGuidedFormAction(input: {
   if (!milestone) return { ok: false, error: 'Milestone not found.' }
   if (milestone.status !== 'active') return { ok: false, error: 'Milestone is not active.' }
 
+  // Validate score range
+  if (input.aiScore !== undefined && (input.aiScore < 0 || input.aiScore > 1000)) {
+    return { ok: false, error: 'AI score must be between 0 and 1000.' }
+  }
+  // Validate confidence range
+  if (input.confidence !== undefined && (input.confidence < 1 || input.confidence > 5)) {
+    return { ok: false, error: 'Confidence must be between 1 and 5.' }
+  }
+  // Limit number of weakness tags
+  if (input.weaknessTags.length > 20) {
+    return { ok: false, error: 'Too many weakness tags (max 20).' }
+  }
+  // Limit reflection length
+  if (input.reflection && input.reflection.length > 5000) {
+    return { ok: false, error: 'Reflection is too long (max 5000 characters).' }
+  }
+  // Validate share link URL if provided
+  if (input.aiShareLink) {
+    try {
+      const url = new URL(input.aiShareLink)
+      if (!['http:', 'https:'].includes(url.protocol)) throw new Error()
+    } catch {
+      return { ok: false, error: 'AI share link must be a valid HTTP(S) URL.' }
+    }
+  }
+
   const sub = await db.submission.create({
     data: {
       milestone: { connect: { id: milestone.id } },
@@ -386,8 +428,8 @@ export async function submitGuidedFormAction(input: {
       aiShareLink: input.aiShareLink?.trim() || null,
       aiScore: input.aiScore ?? null,
       confidence: input.confidence ?? null,
-      weaknessTags: JSON.stringify(input.weaknessTags.filter(t => t.trim().length)),
-      reflection: input.reflection?.trim() || null,
+      weaknessTags: JSON.stringify(input.weaknessTags.filter(t => t.trim().length).slice(0, 20)),
+      reflection: input.reflection?.trim().slice(0, 5000) || null,
       rawPayload: JSON.stringify({ source: 'guided_form' }),
     },
   })
@@ -408,6 +450,7 @@ export async function submitJsonAction(input: {
   const milestone = await db.milestone.findUnique({ where: { id: input.milestoneId } })
   if (!milestone) return { ok: false, error: 'Milestone not found.' }
   if (milestone.status !== 'active') return { ok: false, error: 'Milestone is not active.' }
+  if (input.jsonPayload.length > 100000) return { ok: false, error: 'JSON payload too large (max 100KB).' }
 
   let parsed: Record<string, unknown>
   try {
@@ -773,6 +816,8 @@ export async function createProctoredMockAction(input: {
   if (!canEnter) return { ok: false, error: 'Only instructors or domain captains can enter proctored mock results.' }
 
   if (Number.isNaN(input.score)) return { ok: false, error: 'Score must be a number.' }
+  if (input.score < 0 || input.score > 10000) return { ok: false, error: 'Score out of range.' }
+  if (input.notes && input.notes.length > 2000) return { ok: false, error: 'Notes too long (max 2000 chars).' }
 
   const mock = await db.proctoredMock.create({
     data: {
@@ -1041,6 +1086,7 @@ export type CandidateEvaluationMeta = {
   strengths: string[]
   weaknesses: string[]
   complementarity: string | null
+  roleAssignment: string | null
   recommendation: string | null
   createdAt: Date
 }
@@ -1141,6 +1187,7 @@ export async function listCandidateEvaluationsAction(domainId: string): Promise<
         strengths: JSON.parse(latestEval.strengths || '[]'),
         weaknesses: JSON.parse(latestEval.weaknesses || '[]'),
         complementarity: latestEval.complementarity,
+        roleAssignment: latestEval.roleAssignment,
         recommendation: latestEval.recommendation,
         createdAt: latestEval.createdAt,
       } : null,
@@ -1168,6 +1215,7 @@ export async function listCandidateEvaluationsAction(domainId: string): Promise<
       strengths: JSON.parse(e.strengths || '[]'),
       weaknesses: JSON.parse(e.weaknesses || '[]'),
       complementarity: e.complementarity,
+      roleAssignment: e.roleAssignment,
       recommendation: e.recommendation,
       createdAt: e.createdAt,
     })),
@@ -1254,7 +1302,7 @@ CRITICAL RULES:
 - Cite the data you're drawing on (which weeks, which scores).
 - If the data is thin, say so explicitly in plain language — don't invent a confidence score.
 - Don't just summarize; give the staff a useful read. What pattern do you see? What's the risk? What would you want to see more of before locking in the pick?
-- ${partner ? 'For pairs: explicitly assess complementarity — do their strengths/weaknesses cover each other? Are there red flags (e.g. both weak on the same thing, both low confidence under time pressure)?' : 'For solo candidates: focus on readiness, consistency, and trajectory.'}
+- ${partner ? `For pairs: explicitly assess complementarity — do their strengths/weaknesses cover each other? Are there red flags (e.g. both weak on the same thing, both low confidence under time pressure)? MOST IMPORTANTLY: assign roles. Who should take which kind of problem during the contest? Base this on their actual practice data — if A is consistently faster on easy-tier syntax problems and B is stronger on edge-case debugging, say so. The role assignment is the single most useful thing you can produce for a pair; the staff will use it to coach them on division of labor before November.` : 'For solo candidates: focus on readiness, consistency, and trajectory.'}
 
 DOMAIN: ${domain.name}
 DOMAIN CONTEXT: ${domain.description ?? '(no description)'}
@@ -1281,7 +1329,8 @@ OUTPUT FORMAT (respond as valid JSON, no markdown fences):
   "aiSummary": "2-4 sentence honest read of where this ${partner ? 'pair' : 'candidate'} stands right now",
   "strengths": ["2-4 specific strengths, citing data where possible"],
   "weaknesses": ["2-4 specific weaknesses or risks"]${partner ? `,
-  "complementarity": "1-2 sentence assessment of how they complement (or fail to complement) each other"` : ''},
+  "complementarity": "1-2 sentence assessment of how they complement (or fail to complement) each other",
+  "roleAssignment": "Specific role assignment for the contest. Format: 'A handles X (because...); B handles Y (because...)'. Be concrete — reference the problem types, tiers, or phases where each should lead. This is the actionable output the staff will coach to."` : ''},
   "recommendation": "1-2 sentence coaching note for the instructor — what to watch for, what to drill, whether to lock them in or wait"
 }`
 
@@ -1297,6 +1346,7 @@ export async function createCandidateEvaluationAction(input: {
   strengths: string[]
   weaknesses: string[]
   complementarity?: string
+  roleAssignment?: string
   recommendation?: string
   rawPayload?: string
 }): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
@@ -1315,6 +1365,7 @@ export async function createCandidateEvaluationAction(input: {
       strengths: JSON.stringify(input.strengths.filter(s => s.trim().length)),
       weaknesses: JSON.stringify(input.weaknesses.filter(w => w.trim().length)),
       complementarity: input.complementarity?.trim() || null,
+      roleAssignment: input.roleAssignment?.trim() || null,
       recommendation: input.recommendation?.trim() || null,
       rawPayload: input.rawPayload || '{}',
     },

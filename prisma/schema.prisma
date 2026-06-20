@@ -155,6 +155,7 @@ model CandidateEvaluation {
   strengths         String   @default("[]")    // JSON array of strings
   weaknesses        String   @default("[]")    // JSON array of strings
   complementarity   String?                    // for pairs: how they complement each other
+  roleAssignment    String?                    // for pairs: who does what (e.g. "A takes syntax-heavy, B takes edge-cases")
   recommendation    String?                    // freeform recommendation note
   rawPayload        String   @default("{}")    // JSON — full structured AI output, for audit
   createdAt         DateTime @default(now())

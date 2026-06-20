@@ -38,8 +38,13 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // Inline script to apply the saved theme BEFORE React hydrates, avoiding a flash.
+  const themeScript = `(function(){try{var t=localStorage.getItem('ito-theme');if(t&&t!=='olympics'&&['cyberpunk','formal','terminal'].includes(t)){document.documentElement.setAttribute('data-theme',t)}}catch(e){}})()`
   return (
     <html lang="en" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeScript }} />
+      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased bg-background text-foreground`}
       >

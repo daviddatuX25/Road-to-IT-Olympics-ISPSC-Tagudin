@@ -255,11 +255,7 @@ function DomainCandidatesPanel({
                       </Badge>
                     )}
                   </div>
-                  <Button size="sm" variant="outline" onClick={() => {
-                    // Open eval dialog with this pair
-                    const event = new CustomEvent('open-pair-eval', { detail: { userId: p.a.userId, pairPartnerId: p.b.userId } })
-                    window.dispatchEvent(event)
-                  }}>
+                  <Button size="sm" variant="outline" onClick={() => onRunEval(p.a.userId, p.b.userId)}>
                     <Sparkles className="size-3 mr-1" /> Evaluate pair
                   </Button>
                 </div>
@@ -319,6 +315,15 @@ function CandidateRow({
             {candidate.latestEval.weaknesses.length > 0 && (
               <p className="text-[11px] mt-0.5"><span className="text-amber-700 dark:text-amber-400 font-medium">Weaknesses:</span> {candidate.latestEval.weaknesses.join(' · ')}</p>
             )}
+            {candidate.latestEval.complementarity && (
+              <p className="text-[11px] mt-0.5"><span className="text-primary font-medium">Complementarity:</span> {candidate.latestEval.complementarity}</p>
+            )}
+            {candidate.latestEval.roleAssignment && (
+              <div className="text-[11px] mt-1 p-2 rounded bg-primary/5 border border-primary/20">
+                <span className="text-primary font-medium">Role assignment:</span>
+                <p className="mt-0.5">{candidate.latestEval.roleAssignment}</p>
+              </div>
+            )}
             {candidate.latestEval.recommendation && (
               <p className="text-[11px] mt-0.5 italic text-muted-foreground">&ldquo;{candidate.latestEval.recommendation}&rdquo;</p>
             )}
@@ -364,6 +369,7 @@ function EvaluationDialog({
   const [strengthsText, setStrengthsText] = useState('')
   const [weaknessesText, setWeaknessesText] = useState('')
   const [complementarity, setComplementarity] = useState('')
+  const [roleAssignment, setRoleAssignment] = useState('')
   const [recommendation, setRecommendation] = useState('')
   const [rawJson, setRawJson] = useState('')
 
@@ -380,26 +386,6 @@ function EvaluationDialog({
       }
     })()
   }, [domainKey, userId, pairPartnerId])
-
-  // Listen for the "evaluate pair" custom event from suggested pairings
-  useEffect(() => {
-    const handler = (e: Event) => {
-      const detail = (e as CustomEvent).detail as { userId: string; pairPartnerId: string }
-      void (async () => {
-        const domainId = await resolveDomainId(domainKey)
-        if (!domainId) return
-        try {
-          const result = await api.buildEvaluationPromptAction({ domainId, userId: detail.userId, pairPartnerId: detail.pairPartnerId })
-          setPrompt(result.prompt)
-          setBasis(result.basis)
-        } catch (err) {
-          toast.error(err instanceof Error ? err.message : 'Failed to build prompt')
-        }
-      })()
-    }
-    window.addEventListener('open-pair-eval', handler)
-    return () => window.removeEventListener('open-pair-eval', handler)
-  }, [domainKey])
 
   async function copyPrompt() {
     try {
@@ -419,6 +405,7 @@ function EvaluationDialog({
       if (Array.isArray(parsed.strengths)) setStrengthsText(parsed.strengths.join('\n'))
       if (Array.isArray(parsed.weaknesses)) setWeaknessesText(parsed.weaknesses.join('\n'))
       if (parsed.complementarity) setComplementarity(parsed.complementarity)
+      if (parsed.roleAssignment) setRoleAssignment(parsed.roleAssignment)
       if (parsed.recommendation) setRecommendation(parsed.recommendation)
       toast.success('Filled from JSON.')
     } catch {
@@ -437,6 +424,7 @@ function EvaluationDialog({
         strengths: strengthsText.split('\n').map(s => s.trim()).filter(Boolean),
         weaknesses: weaknessesText.split('\n').map(s => s.trim()).filter(Boolean),
         complementarity: pairPartnerId ? complementarity : undefined,
+        roleAssignment: pairPartnerId ? roleAssignment : undefined,
         recommendation: recommendation || undefined,
         rawPayload: rawJson || '{}',
       })
@@ -535,15 +523,29 @@ function EvaluationDialog({
               </div>
 
               {pairPartnerId && (
-                <div className="space-y-1.5">
-                  <Label>Complementarity (pair only)</Label>
-                  <Textarea
-                    value={complementarity}
-                    onChange={(e) => setComplementarity(e.target.value)}
-                    rows={2}
-                    placeholder="How they complement (or fail to complement) each other"
-                  />
-                </div>
+                <>
+                  <div className="space-y-1.5">
+                    <Label>Complementarity (pair only)</Label>
+                    <Textarea
+                      value={complementarity}
+                      onChange={(e) => setComplementarity(e.target.value)}
+                      rows={2}
+                      placeholder="How they complement (or fail to complement) each other"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Role assignment (pair only — the actionable output)</Label>
+                    <Textarea
+                      value={roleAssignment}
+                      onChange={(e) => setRoleAssignment(e.target.value)}
+                      rows={3}
+                      placeholder="e.g. 'A (lia.exe) handles Easy-tier problems first — she is consistently faster on syntax. B (markbyte) takes Average-tier and serves as the debug partner on Difficult.'"
+                    />
+                    <p className="text-[11px] text-muted-foreground">
+                      Who does what during the contest. This is what staff will coach to — be concrete about problem types, tiers, and division of labor.
+                    </p>
+                  </div>
+                </>
               )}
 
               <div className="space-y-1.5">
@@ -613,6 +615,12 @@ function HistoryDialog({
                   )}
                   {e.complementarity && (
                     <p className="text-xs mt-0.5"><span className="text-primary font-medium">Complementarity:</span> {e.complementarity}</p>
+                  )}
+                  {e.roleAssignment && (
+                    <div className="text-xs mt-1 p-2 rounded bg-primary/5 border border-primary/20">
+                      <span className="text-primary font-medium">Role assignment:</span>
+                      <p className="mt-0.5">{e.roleAssignment}</p>
+                    </div>
                   )}
                   {e.recommendation && (
                     <p className="text-xs mt-0.5 italic text-muted-foreground">&ldquo;{e.recommendation}&rdquo;</p>

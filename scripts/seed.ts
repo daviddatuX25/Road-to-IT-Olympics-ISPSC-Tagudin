@@ -539,6 +539,7 @@ Write 150-300 words on:
       strengths: JSON.stringify(['consistent weekly practice (4-week streak)', 'clean readable code', 'strong on easy + average tier problems']),
       weaknesses: JSON.stringify(['bitmask DP not intuitive yet', 'palindrome edge cases', 'low confidence under difficult-tier time pressure']),
       complementarity: 'Strong complementarity — lia leads on syntax/speed, mark catches edge cases. Their one shared weakness (bitmask DP) is a real risk for the difficult tier in November.',
+      roleAssignment: 'A (lia.exe) handles Easy-tier problems first — she is consistently faster on syntax-heavy solves (8-9 avg on easy tier). B (markbyte) takes Average-tier and serves as the debug partner on Difficult — his edge-case catching is stronger (caught the palindrome case-insensitivity issue lia missed). For the 2-hour contest: lia starts on problem 1 (easy) while mark reads problems 4-6 (difficult) and plans the approach. They reconvene on problem 3 (average) together.',
       recommendation: 'Lock them in as the Java pair. Drill bitmask problems through September. If you have time for one more mock before October, give them a difficult-tier problem under timed conditions to test the nerves.',
       rawPayload: JSON.stringify({ source: 'seed', basis: 'combined' }),
       createdAt: daysAgo(8),

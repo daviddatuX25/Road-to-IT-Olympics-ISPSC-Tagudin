@@ -2,7 +2,7 @@
 
 import { api } from '@/lib/api-client'
 import { useState, useTransition, useEffect } from 'react'
-import { Loader2, Save, UserCircle, Calendar, Flame, ClipboardCheck, Trophy } from 'lucide-react'
+import { Loader2, Save, UserCircle, Calendar, Flame, ClipboardCheck, Trophy, Palette, Check } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -14,8 +14,10 @@ import { toast } from 'sonner'
 import { getAvatar, AVATARS } from '@/lib/avatars'
 import { DOMAINS, domainMeta } from '@/lib/domains'
 import { currentManilaWeekStart } from '@/lib/streaks'
+import { useTheme, THEMES, type ThemeKey } from '@/lib/use-theme'
 import type { SessionUser } from '@/lib/auth'
 import { format } from 'date-fns'
+import { cn } from '@/lib/utils'
 
 export function ProfileSettings({ user }: { user: SessionUser }) {
   const [nickname, setNickname] = useState(user.nickname)
@@ -116,6 +118,9 @@ export function ProfileSettings({ user }: { user: SessionUser }) {
         </CardContent>
       </Card>
 
+      {/* Theme picker */}
+      <ThemePicker />
+
       {/* Season context */}
       <Card>
         <CardHeader>
@@ -180,3 +185,43 @@ export function ProfileSettings({ user }: { user: SessionUser }) {
 
 void DOMAINS
 void ClipboardCheck
+
+function ThemePicker() {
+  const { theme, setTheme } = useTheme()
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base flex items-center gap-2"><Palette className="size-4" /> Theme</CardTitle>
+        <CardDescription>Pick a look. Stored in your browser, not your account — each device can have its own.</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {THEMES.map((t) => (
+            <button
+              key={t.key}
+              onClick={() => setTheme(t.key as ThemeKey)}
+              className={cn(
+                'relative text-left p-3 rounded-lg border-2 transition-all',
+                theme === t.key ? 'border-primary shadow-sm' : 'border-border hover:border-primary/40',
+              )}
+            >
+              {theme === t.key && (
+                <div className="absolute top-2 right-2 size-5 rounded-full bg-primary text-primary-foreground grid place-items-center">
+                  <Check className="size-3" />
+                </div>
+              )}
+              <div className="flex gap-1 mb-2">
+                {t.swatch.map((c, i) => (
+                  <div key={i} className="size-6 rounded-md border" style={{ background: c }} />
+                ))}
+              </div>
+              <p className="text-sm font-medium">{t.label}</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">{t.description}</p>
+            </button>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
