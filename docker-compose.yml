@@ -1,0 +1,25 @@
+services:
+  rio:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: rio
+    ports:
+      - "3000:3000"   # Next.js directly (useful for debugging)
+      - "81:81"       # Caddy reverse proxy (the "official" entrypoint)
+    environment:
+      - NODE_ENV=production
+      - HOSTNAME=0.0.0.0
+      - PORT=3000
+      # HMAC secret for session cookies. CHANGE THIS for production.
+      # If unset, a random one is generated per restart (sessions won't survive).
+      - SESSION_SECRET=dev-only-change-me-in-prod-32chars-min!!
+      # Use the persistent DB from the mounted volume (NOT the read-only baked one).
+      - DATABASE_URL=file:/app/db/custom.db
+    volumes:
+      # Persistent DB so data survives image rebuilds.
+      - rio-db:/app/db
+    restart: unless-stopped
+
+volumes:
+  rio-db:

@@ -1,0 +1,25 @@
+node_modules
+.next
+.git
+.vercel
+
+# logs
+*.log
+dev.log
+server.log
+
+# local artifacts
+.env.local
+.env.*.local
+test
+prompt
+.claude
+.z-ai-config
+
+# archives
+*.tar
+*.tar.gz
+
+# build output of old runs
+download
+upload
