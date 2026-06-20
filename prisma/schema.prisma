@@ -1,0 +1,146 @@
+// Road to IT Olympics — full schema
+// Implements §4 of handoff.md, plus the wall between practice and selection (§1).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  passwordHash  String
+  role          String   @default("student") // 'admin' | 'instructor' | 'student'
+  nickname      String
+  realName      String?
+  studentId     String?
+  avatarId      String   @default("avatar-01")
+  createdAt     DateTime @default(now())
+
+  captainOf           DomainCaptain[]
+  submissions         Submission[]
+  proctoredMocksFor   ProctoredMock[]  @relation("MockSubject")
+  proctoredMocksBy    ProctoredMock[]  @relation("MockEnteredBy")
+  mocksAsPartner      ProctoredMock[]  @relation("MockPartner")
+  teamSelectionsFor   TeamSelection[]  @relation("TeamSelected")
+  teamSelectionsBy    TeamSelection[]  @relation("TeamDecidedBy")
+  milestonesCreated   Milestone[]      @relation("MilestoneCreator")
+  spotlights          WeeklySpotlight[]
+}
+
+model Domain {
+  id          String   @id @default(cuid())
+  key         String   @unique // 'java', 'web', 'db', 'quiz', 'python', 'net'
+  name        String
+  description String?
+  color       String   @default("#16a34a")
+  icon        String   @default("Trophy")
+
+  captains         DomainCaptain[]
+  milestones       Milestone[]
+  proctoredMocks   ProctoredMock[]
+  teamSelections   TeamSelection[]
+}
+
+model DomainCaptain {
+  userId   String
+  domainId String
+  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  domain   Domain @relation(fields: [domainId], references: [id], onDelete: Cascade)
+
+  @@id([userId, domainId])
+}
+
+model Milestone {
+  id                 String   @id @default(cuid())
+  domainId           String
+  version            Int      @default(1)
+  parentMilestoneId  String?  // links versions of "the same" milestone
+  weekOrPhase        String   // 'july-diagnostic', 'aug-w1', 'sep-maint', 'oct-sprint', etc.
+  mode               String   // 'tutor' | 'assessment' | 'journal'
+  difficulty         String   // 'easy' | 'average' | 'difficult'
+  title              String
+  promptTemplate     String
+  acceptedInputTypes String   @default("guided_form") // JSON array
+  status             String   @default("draft") // 'draft' | 'active' | 'archived'
+  isLocked           Boolean  @default(false)
+  createdBy          String
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  domain      Domain       @relation(fields: [domainId], references: [id])
+  creator     User         @relation("MilestoneCreator", fields: [createdBy], references: [id])
+  submissions Submission[]
+}
+
+model Submission {
+  id                        String   @id @default(cuid())
+  milestoneId               String
+  milestoneVersion          Int      // pinned at submit time, not inferred via join
+  userId                    String
+  clientSubmissionTimestamp DateTime // device clock; drives the streak
+  serverReceivedTimestamp   DateTime @default(now())
+  syncStatus                String   @default("synced")
+  inputType                 String   // 'guided_form' | 'json' | 'screenshot'
+  aiShareLink               String?
+  aiScore                   Int?
+  confidence                Int?     // 1-5 self-reported
+  weaknessTags              String   @default("[]") // JSON array
+  reflection                String?  // free-form journal/reflection
+  rawPayload                String   @default("{}") // JSON
+
+  milestone Milestone @relation(fields: [milestoneId], references: [id])
+  user      User      @relation(fields: [userId], references: [id])
+}
+
+model ProctoredMock {
+  id            String   @id @default(cuid())
+  domainId      String
+  userId        String
+  pairPartnerId String?
+  score         Float
+  enteredById   String
+  eventDate     DateTime
+  notes         String?
+
+  domain     Domain @relation(fields: [domainId], references: [id])
+  user       User   @relation("MockSubject", fields: [userId], references: [id])
+  partner    User?  @relation("MockPartner", fields: [pairPartnerId], references: [id])
+  enteredBy  User   @relation("MockEnteredBy", fields: [enteredById], references: [id])
+}
+
+model TeamSelection {
+  id          String   @id @default(cuid())
+  domainId    String
+  userId      String
+  decidedById String
+  decidedAt   DateTime @default(now())
+  rationale   String?
+
+  domain    Domain @relation(fields: [domainId], references: [id])
+  user      User   @relation("TeamSelected", fields: [userId], references: [id])
+  decidedBy User   @relation("TeamDecidedBy", fields: [decidedById], references: [id])
+}
+
+model WeeklySpotlight {
+  id        String   @id @default(cuid())
+  userId    String
+  weekOf    DateTime
+  reason    String   // 'streak' | 'solve' | 'reflection'
+  blurb     String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+model AppEvent {
+  id        String   @id @default(cuid())
+  kind      String   // 'milestone-published' | 'mock-graded' | 'team-selected' | 'spotlight'
+  title     String
+  detail    String?
+  createdAt DateTime @default(now())
+}

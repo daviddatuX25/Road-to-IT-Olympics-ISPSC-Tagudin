@@ -1,0 +1,160 @@
+// Domain metadata and the season calendar (handoff §1, concept doc "The calendar").
+
+import {
+  Database, Code2, Brain, Globe, Terminal, Network, Trophy,
+  type LucideIcon,
+} from 'lucide-react'
+
+export type DomainKey = 'db' | 'java' | 'quiz' | 'web' | 'python' | 'net'
+
+export type DomainMeta = {
+  key: DomainKey
+  name: string
+  shortName: string
+  description: string
+  color: string
+  icon: LucideIcon
+  // What practice actually means for this domain (from concept doc)
+  practiceNote: string
+  contestFormat: string
+  pairBased: boolean
+}
+
+export const DOMAINS: DomainMeta[] = [
+  {
+    key: 'db',
+    name: 'Database Management',
+    shortName: 'DB',
+    description: 'SQL fluency under time pressure, mysql CLI via XAMPP, screenshot-proven queries in Word docs.',
+    color: '#0ea5e9',
+    icon: Database,
+    practiceNote: 'Raw mysql CLI reps + timed screenshot-to-Word documentation. Winners decided by fastest correct submission.',
+    contestFormat: 'XAMPP + mysql CLI, screenshots in Word doc, fastest correct wins.',
+    pairBased: false,
+  },
+  {
+    key: 'java',
+    name: 'Java Programming',
+    shortName: 'Java',
+    description: 'Six problems (Easy 10 / Avg 20 / Hard 30 pts) in two hours. Notepad + command line only. Pair-based.',
+    color: '#ea580c',
+    icon: Code2,
+    practiceNote: 'No IDE from week one. Practice in Notepad + javac in pairs — that exact restricted setup.',
+    contestFormat: '6 problems, 2 hours, Easy/Average/Difficult tiers, Notepad + CLI, pair-based.',
+    pairBased: true,
+  },
+  {
+    key: 'quiz',
+    name: 'IT Quiz Bee',
+    shortName: 'Quiz',
+    description: 'Pairs survive elimination, ~15 schools reach tiered final (Easy → Intermediate → Difficult).',
+    color: '#8b5cf6',
+    icon: Brain,
+    practiceNote: 'Broad recall fluency first — the bottleneck is the elimination round, not deep specialization.',
+    contestFormat: 'Elimination round → ~15 schools → tiered final (Easy / Intermediate / Difficult).',
+    pairBased: true,
+  },
+  {
+    key: 'web',
+    name: 'Web Design',
+    shortName: 'Web',
+    description: 'Single themed page in 2 hours. HTML/HTML5 + CSS/CSS3 only. Notepad++. Assets handed over on the day.',
+    color: '#ec4899',
+    icon: Globe,
+    practiceNote: 'Fast, decisive, hand-coded layout against unseen briefs. Only the provided assets.',
+    contestFormat: '1 themed page, 2 hours, HTML/CSS only, Notepad++, day-of assets.',
+    pairBased: false,
+  },
+  {
+    key: 'python',
+    name: 'Python Programming',
+    shortName: 'Python',
+    description: 'Mechanics still being confirmed against official documents — same approach applies once we have them.',
+    color: '#16a34a',
+    icon: Terminal,
+    practiceNote: 'Mechanics TBD — same practice loop applies once official docs arrive.',
+    contestFormat: 'TBD — pending official contest documents.',
+    pairBased: false,
+  },
+  {
+    key: 'net',
+    name: 'Computer Networking',
+    shortName: 'Net',
+    description: 'Mechanics still being confirmed against official documents — same approach applies once we have them.',
+    color: '#f59e0b',
+    icon: Network,
+    practiceNote: 'Mechanics TBD — same practice loop applies once official docs arrive.',
+    contestFormat: 'TBD — pending official contest documents.',
+    pairBased: false,
+  },
+]
+
+export const DOMAIN_MAP: Record<DomainKey, DomainMeta> = Object.fromEntries(
+  DOMAINS.map(d => [d.key, d]),
+) as Record<DomainKey, DomainMeta>
+
+export function domainMeta(key: string): DomainMeta {
+  return DOMAIN_MAP[key as DomainKey] ?? DOMAINS[0]
+}
+
+// --- Season phases -----------------------------------------------------------
+export type PhaseKey =
+  | 'july-diagnostic'
+  | 'aug-w1'
+  | 'aug-w2'
+  | 'aug-w3'
+  | 'aug-w4'
+  | 'sep-maint'
+  | 'oct-sprint'
+  | 'nov-final'
+
+export type Phase = {
+  key: PhaseKey
+  label: string
+  shortLabel: string
+  description: string
+  isMaintenance: boolean // skip weeks don't break streaks
+  isMockHeavy: boolean
+}
+
+export const PHASES: Phase[] = [
+  { key: 'july-diagnostic', label: 'July — Diagnostic Week',        shortLabel: 'July',     description: 'Diagnostic per domain to find natural strengths. Open trivia nights to recruit.', isMaintenance: false, isMockHeavy: false },
+  { key: 'aug-w1',          label: 'August W1 — Practice Starts',    shortLabel: 'Aug W1',  description: 'Captains per domain take the lead. Real practice cycles begin.', isMaintenance: false, isMockHeavy: false },
+  { key: 'aug-w2',          label: 'August W2 — Practice',           shortLabel: 'Aug W2',  description: 'Weekly reps continue. Spaced-repetition callbacks to earlier material.', isMaintenance: false, isMockHeavy: false },
+  { key: 'aug-w3',          label: 'August W3 — First Scrimmage',    shortLabel: 'Aug W3',  description: 'First scrimmage under timed conditions.', isMaintenance: false, isMockHeavy: true },
+  { key: 'aug-w4',          label: 'August W4 — Practice',           shortLabel: 'Aug W4',  description: 'Continue reps. Captains review scrimmage gaps.', isMaintenance: false, isMockHeavy: false },
+  { key: 'sep-maint',       label: 'September — Maintenance Mode',   shortLabel: 'Sept',    description: 'Optional async milestones only. Streaks survive (skip weeks).', isMaintenance: true,  isMockHeavy: false },
+  { key: 'oct-sprint',      label: 'October — Intensive Sprint',     shortLabel: 'Oct',     description: 'Full-dress mock contests in real restricted environment. Pairs finalized.', isMaintenance: false, isMockHeavy: true },
+  { key: 'nov-final',       label: 'November — Final Taper',         shortLabel: 'Nov',     description: 'High-frequency mocks for speed and nerves, then light review and real rest.', isMaintenance: false, isMockHeavy: true },
+]
+
+export const PHASE_MAP: Record<PhaseKey, Phase> = Object.fromEntries(
+  PHASES.map(p => [p.key, p]),
+) as Record<PhaseKey, Phase>
+
+export function phaseLabel(key: string): string {
+  return PHASE_MAP[key as PhaseKey]?.label ?? key
+}
+
+// --- Mode + difficulty (mirroring the contest's own tiers) ------------------
+export const MODES = [
+  { key: 'tutor',       label: 'Tutor',       description: 'AI explains, demonstrates, asks follow-ups. No scoring attached.' },
+  { key: 'assessment',  label: 'Assessment',  description: 'Self-assessment with rubric. AI does NOT hand over solutions.' },
+  { key: 'journal',     label: 'Journal',     description: 'Reflection-only. No score, just a free-form journal entry.' },
+] as const
+
+export const DIFFICULTIES = [
+  { key: 'easy',      label: 'Easy',      points: 10, color: '#16a34a' },
+  { key: 'average',   label: 'Average',   points: 20, color: '#f59e0b' },
+  { key: 'difficult', label: 'Difficult', points: 30, color: '#ef4444' },
+] as const
+
+export function difficultyMeta(key: string) {
+  return DIFFICULTIES.find(d => d.key === key) ?? DIFFICULTIES[0]
+}
+export function modeMeta(key: string) {
+  return MODES.find(m => m.key === key) ?? MODES[0]
+}
+
+// Trophy icon for season branding
+export { Trophy }
