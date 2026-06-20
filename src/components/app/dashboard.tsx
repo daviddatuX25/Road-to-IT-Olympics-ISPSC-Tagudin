@@ -120,7 +120,7 @@ function StudentDashboard({ user }: { user: SessionUser }) {
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Streaks by domain</CardTitle>
-          <CardDescription>Each domain tracks its own streak. Skip weeks (no active milestone) don&apos;t break it.</CardDescription>
+          <CardDescription>Each domain tracks its own streak. Missed weeks with active milestones break it — consistency is mastery.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           {data.streakBreakdown.map((b) => {

@@ -599,6 +599,121 @@ export async function getLeaderboardAction(): Promise<LeaderboardEntry[]> {
 }
 
 // -----------------------------------------------------------------------------
+// Assessment leaderboard (separate from the streak leaderboard)
+// -----------------------------------------------------------------------------
+// The original concept doc kept AI scores off the public leaderboard entirely.
+// The user explicitly overrode that — they accept the cheating risk and will
+// screen + remind students. So this view shows top scorers by domain.
+// AI scores are still private on the submissions themselves (a student can't
+// see another student's reflection or weakness tags), but the aggregate
+// ranking is public.
+
+export type AssessmentLeader = {
+  userId: string
+  nickname: string
+  avatarId: string
+  isCaptain: boolean
+  totalScore: number       // sum of all assessment-mode scores
+  averageScore: number     // average across assessment-mode submissions
+  assessmentCount: number  // how many assessment-mode submissions
+  bestScore: number        // highest single assessment score
+  perDomain: Array<{
+    domainKey: string
+    domainName: string
+    domainColor: string
+    totalScore: number
+    averageScore: number
+    count: number
+  }>
+}
+
+export async function getAssessmentLeadersAction(): Promise<AssessmentLeader[]> {
+  const session = await getSession()
+  if (!session) return []
+
+  // Get all assessment-mode submissions with a score, joined to the milestone's domain
+  const submissions = await db.submission.findMany({
+    where: {
+      aiScore: { not: null },
+      milestone: { mode: 'assessment' },
+    },
+    include: {
+      user: {
+        select: {
+          id: true, nickname: true, avatarId: true, role: true,
+          captainOf: { include: { domain: true } },
+        },
+      },
+      milestone: { include: { domain: true } },
+    },
+  })
+
+  // Group by user
+  const byUser = new Map<string, AssessmentLeader & { _perDomainMap: Map<string, { domainKey: string; domainName: string; domainColor: string; totalScore: number; count: number }> }>()
+  for (const sub of submissions) {
+    if (sub.user.role !== 'student') continue
+    const score = sub.aiScore ?? 0
+    if (!byUser.has(sub.userId)) {
+      byUser.set(sub.userId, {
+        userId: sub.userId,
+        nickname: sub.user.nickname,
+        avatarId: sub.user.avatarId,
+        isCaptain: sub.user.captainOf.length > 0,
+        totalScore: 0,
+        averageScore: 0,
+        assessmentCount: 0,
+        bestScore: 0,
+        perDomain: [],
+        _perDomainMap: new Map(),
+      })
+    }
+    const entry = byUser.get(sub.userId)!
+    entry.totalScore += score
+    entry.assessmentCount += 1
+    entry.bestScore = Math.max(entry.bestScore, score)
+
+    const dkey = sub.milestone.domain.key
+    if (!entry._perDomainMap.has(dkey)) {
+      entry._perDomainMap.set(dkey, {
+        domainKey: dkey,
+        domainName: sub.milestone.domain.name,
+        domainColor: sub.milestone.domain.color,
+        totalScore: 0,
+        count: 0,
+      })
+    }
+    const pd = entry._perDomainMap.get(dkey)!
+    pd.totalScore += score
+    pd.count += 1
+  }
+
+  const out: AssessmentLeader[] = []
+  for (const e of byUser.values()) {
+    e.averageScore = e.assessmentCount > 0 ? Math.round((e.totalScore / e.assessmentCount) * 10) / 10 : 0
+    e.perDomain = Array.from(e._perDomainMap.values()).map(pd => ({
+      domainKey: pd.domainKey,
+      domainName: pd.domainName,
+      domainColor: pd.domainColor,
+      totalScore: pd.totalScore,
+      count: pd.count,
+      averageScore: pd.count > 0 ? Math.round((pd.totalScore / pd.count) * 10) / 10 : 0,
+    })).sort((a, b) => b.totalScore - a.totalScore)
+    // Strip the internal map
+    const { _perDomainMap, ...rest } = e
+    void _perDomainMap
+    out.push(rest)
+  }
+
+  // Sort by total score desc, then average desc, then count desc
+  out.sort((a, b) =>
+    b.totalScore - a.totalScore ||
+    b.averageScore - a.averageScore ||
+    b.assessmentCount - a.assessmentCount
+  )
+  return out
+}
+
+// -----------------------------------------------------------------------------
 // Proctored Mocks (eligibility gate)
 // -----------------------------------------------------------------------------
 
@@ -905,4 +1020,385 @@ export async function getAdminDashboardDataAction() {
     counts: { users, domains, captains, milestones, submissions, mocks, selections },
     events,
   }
+}
+
+// -----------------------------------------------------------------------------
+// Candidate evaluations (staff-only, from handoff_added.md)
+// -----------------------------------------------------------------------------
+//
+// The Leading Candidates panel. Never auto-writes to team_selections.
+// Append-only. Students have no read path to this data, not even their own row.
+
+export type CandidateEvaluationMeta = {
+  id: string
+  domainId: string
+  userId: string
+  pairedWithUserId: string | null
+  evaluatedById: string
+  evaluatorNickname: string
+  evaluationBasis: 'practice_only' | 'proctored_only' | 'combined'
+  aiSummary: string
+  strengths: string[]
+  weaknesses: string[]
+  complementarity: string | null
+  recommendation: string | null
+  createdAt: Date
+}
+
+async function requireStaffForDomain(domainId: string) {
+  const user = await requireUser()
+  if (user.role === 'admin' || user.role === 'instructor') return user
+  if (user.role === 'student') {
+    const cap = await db.domainCaptain.findUnique({
+      where: { userId_domainId: { userId: user.id, domainId } },
+    })
+    if (cap) return user
+  }
+  throw new Error('FORBIDDEN')
+}
+
+export async function listCandidateEvaluationsAction(domainId: string): Promise<{
+  evaluations: CandidateEvaluationMeta[]
+  candidates: Array<{
+    userId: string
+    nickname: string
+    avatarId: string
+    realName: string | null
+    studentId: string | null
+    isCaptain: boolean
+    assessmentCount: number
+    assessmentAvg: number
+    assessmentBest: number
+    streak: number
+    proctoredScore: number | null
+    proctoredCount: number
+    latestEval: CandidateEvaluationMeta | null
+  }>
+}> {
+  await requireStaffForDomain(domainId)
+
+  const [evaluations, students, domain] = await Promise.all([
+    db.candidateEvaluation.findMany({
+      where: { domainId },
+      include: {
+        user: { select: { id: true, nickname: true, avatarId: true, realName: true, studentId: true } },
+        pairedWith: { select: { id: true, nickname: true, avatarId: true } },
+        evaluatedBy_: { select: { id: true, nickname: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    }),
+    db.user.findMany({
+      where: { role: 'student' },
+      select: {
+        id: true, nickname: true, avatarId: true, realName: true, studentId: true,
+        captainOf: { where: { domainId }, select: { domainId: true } },
+        submissions: {
+          where: { milestone: { domainId } },
+          include: { milestone: { select: { mode: true } } },
+        },
+        proctoredMocksFor: {
+          where: { domainId },
+          select: { score: true },
+        },
+      },
+    }),
+    db.domain.findUnique({ where: { id: domainId } }),
+  ])
+
+  void domain
+
+  // Build candidate summary per student
+  const { computeStreakForUserDomain } = await import('@/lib/streaks')
+  const candidates = []
+  for (const s of students) {
+    const assessmentSubs = s.submissions.filter(sub => sub.milestone.mode === 'assessment' && sub.aiScore !== null)
+    const scores = assessmentSubs.map(sub => sub.aiScore ?? 0)
+    const streak = await computeStreakForUserDomain(s.id, domainId)
+    const proctored = s.proctoredMocksFor
+    const latestEval = evaluations.find(e => e.userId === s.id || e.pairedWithUserId === s.id)
+    candidates.push({
+      userId: s.id,
+      nickname: s.nickname,
+      avatarId: s.avatarId,
+      realName: s.realName,
+      studentId: s.studentId,
+      isCaptain: s.captainOf.length > 0,
+      assessmentCount: scores.length,
+      assessmentAvg: scores.length > 0 ? Math.round((scores.reduce((a, b) => a + b, 0) / scores.length) * 10) / 10 : 0,
+      assessmentBest: scores.length > 0 ? Math.max(...scores) : 0,
+      streak,
+      proctoredScore: proctored.length > 0 ? Math.max(...proctored.map(p => p.score)) : null,
+      proctoredCount: proctored.length,
+      latestEval: latestEval ? {
+        id: latestEval.id,
+        domainId: latestEval.domainId,
+        userId: latestEval.userId,
+        pairedWithUserId: latestEval.pairedWithUserId,
+        evaluatedById: latestEval.evaluatedBy,
+        evaluatorNickname: latestEval.evaluatedBy_.nickname,
+        evaluationBasis: latestEval.evaluationBasis as 'practice_only' | 'proctored_only' | 'combined',
+        aiSummary: latestEval.aiSummary,
+        strengths: JSON.parse(latestEval.strengths || '[]'),
+        weaknesses: JSON.parse(latestEval.weaknesses || '[]'),
+        complementarity: latestEval.complementarity,
+        recommendation: latestEval.recommendation,
+        createdAt: latestEval.createdAt,
+      } : null,
+    })
+  }
+
+  // Sort candidates: those with proctored scores first (by score desc), then by assessment avg desc, then streak
+  candidates.sort((a, b) => {
+    if (a.proctoredScore !== null && b.proctoredScore !== null) return b.proctoredScore - a.proctoredScore
+    if (a.proctoredScore !== null) return -1
+    if (b.proctoredScore !== null) return 1
+    return b.assessmentAvg - a.assessmentAvg || b.streak - a.streak
+  })
+
+  return {
+    evaluations: evaluations.map(e => ({
+      id: e.id,
+      domainId: e.domainId,
+      userId: e.userId,
+      pairedWithUserId: e.pairedWithUserId,
+      evaluatedById: e.evaluatedBy,
+      evaluatorNickname: e.evaluatedBy_.nickname,
+      evaluationBasis: e.evaluationBasis as 'practice_only' | 'proctored_only' | 'combined',
+      aiSummary: e.aiSummary,
+      strengths: JSON.parse(e.strengths || '[]'),
+      weaknesses: JSON.parse(e.weaknesses || '[]'),
+      complementarity: e.complementarity,
+      recommendation: e.recommendation,
+      createdAt: e.createdAt,
+    })),
+    candidates,
+  }
+}
+
+// Build the evaluation prompt for staff to copy into their AI tool.
+// Pulls in the student's submission history, weakness tags, reflections,
+// and proctored mock scores. The basis is determined by what data exists:
+//  - proctored_only: proctored mocks exist but no assessment submissions
+//  - practice_only: assessment submissions exist but no proctored mocks
+//  - combined: both exist
+export async function buildEvaluationPromptAction(input: {
+  domainId: string
+  userId: string
+  pairPartnerId?: string | null
+}): Promise<{ prompt: string; basis: 'practice_only' | 'proctored_only' | 'combined' }> {
+  await requireStaffForDomain(input.domainId)
+
+  const [student, domain, partner] = await Promise.all([
+    db.user.findUnique({
+      where: { id: input.userId },
+      select: { id: true, nickname: true, avatarId: true, realName: true, studentId: true },
+    }),
+    db.domain.findUnique({ where: { id: input.domainId } }),
+    input.pairPartnerId
+      ? db.user.findUnique({ where: { id: input.pairPartnerId }, select: { id: true, nickname: true, realName: true } })
+      : Promise.resolve(null),
+  ])
+  if (!student || !domain) throw new Error('Not found')
+
+  const [submissions, mocks, partnerSubs, partnerMocks] = await Promise.all([
+    db.submission.findMany({
+      where: { userId: student.id, milestone: { domainId: domain.id } },
+      include: { milestone: { select: { title: true, mode: true, difficulty: true, weekOrPhase: true } } },
+      orderBy: { clientSubmissionTimestamp: 'desc' },
+      take: 30,
+    }),
+    db.proctoredMock.findMany({
+      where: { userId: student.id, domainId: domain.id },
+      orderBy: { eventDate: 'desc' },
+    }),
+    partner
+      ? db.submission.findMany({
+          where: { userId: partner.id, milestone: { domainId: domain.id } },
+          include: { milestone: { select: { title: true, mode: true, difficulty: true, weekOrPhase: true } } },
+          orderBy: { clientSubmissionTimestamp: 'desc' },
+          take: 20,
+        })
+      : Promise.resolve([]),
+    partner
+      ? db.proctoredMock.findMany({
+          where: { userId: partner.id, domainId: domain.id },
+          orderBy: { eventDate: 'desc' },
+        })
+      : Promise.resolve([]),
+  ])
+
+  const hasPractice = submissions.some(s => s.aiScore !== null)
+  const hasProctored = mocks.length > 0
+  const basis: 'practice_only' | 'proctored_only' | 'combined' =
+    hasPractice && hasProctored ? 'combined' : hasProctored ? 'proctored_only' : 'practice_only'
+
+  const formatSubs = (subs: typeof submissions, who: string) => {
+    if (subs.length === 0) return `  ${who}: no practice submissions in this domain yet.`
+    return subs.slice(0, 15).map(s => {
+      const tags = JSON.parse(s.weaknessTags || '[]').join(', ')
+      const reflection = s.reflection ? ` | reflection: "${s.reflection.slice(0, 200)}${s.reflection.length > 200 ? '…' : ''}"` : ''
+      return `  ${who} — ${s.milestone.title} (${s.milestone.mode}, ${s.milestone.difficulty}, ${s.milestone.weekOrPhase}) | score: ${s.aiScore ?? 'n/a'} | confidence: ${s.confidence ?? 'n/a'}/5${tags ? ` | weakness tags: ${tags}` : ''}${reflection}`
+    }).join('\n')
+  }
+
+  type MockArray = { eventDate: Date; score: number; notes: string | null }[]
+  const formatMocks = (mocks: MockArray, who: string) => {
+    if (mocks.length === 0) return `  ${who}: no proctored mocks in this domain yet.`
+    return mocks.map(m => `  ${who} — ${m.eventDate.toISOString().slice(0, 10)} | score: ${m.score}${m.notes ? ` | notes: "${m.notes.slice(0, 200)}${m.notes.length > 200 ? '…' : ''}"` : ''}`).join('\n')
+  }
+
+  const prompt = `You are evaluating ${partner ? 'a candidate pair' : 'a candidate'} for the IT Skills Olympics ${domain.name} team. This is a staff-only read to help a human (the instructor or domain captain) decide whether to select ${partner ? 'them as a pair' : 'them'} for the November competition. Your output is INPUT to a human decision, not the decision itself.
+
+CRITICAL RULES:
+- Be honest, specific, and brief. Avoid hedging fluff.
+- Cite the data you're drawing on (which weeks, which scores).
+- If the data is thin, say so explicitly in plain language — don't invent a confidence score.
+- Don't just summarize; give the staff a useful read. What pattern do you see? What's the risk? What would you want to see more of before locking in the pick?
+- ${partner ? 'For pairs: explicitly assess complementarity — do their strengths/weaknesses cover each other? Are there red flags (e.g. both weak on the same thing, both low confidence under time pressure)?' : 'For solo candidates: focus on readiness, consistency, and trajectory.'}
+
+DOMAIN: ${domain.name}
+DOMAIN CONTEXT: ${domain.description ?? '(no description)'}
+CONTEST FORMAT: ${domain.contestFormat}
+
+${partner ? `CANDIDATE A: ${student.nickname}${student.realName ? ` (${student.realName})` : ''}${student.studentId ? ` [${student.studentId}]` : ''}
+CANDIDATE B: ${partner.nickname}${partner.realName ? ` (${partner.realName})` : ''}` : `CANDIDATE: ${student.nickname}${student.realName ? ` (${student.realName})` : ''}${student.studentId ? ` [${student.studentId}]` : ''}`}
+
+PRACTICE DATA (most recent first):
+${formatSubs(submissions, partner ? 'A' : 'Student')}
+${partner ? formatSubs(partnerSubs, 'B') : ''}
+
+PROCTORED MOCK RESULTS (most recent first):
+${formatMocks(mocks, partner ? 'A' : 'Student')}
+${partner ? formatMocks(partnerMocks, 'B') : ''}
+
+EVALUATION BASIS: ${basis}
+${basis === 'practice_only' ? '(Practice data only — no proctored results yet. Treat this read as tentative; the real signal comes from proctored mocks in October.)' : ''}
+${basis === 'proctored_only' ? '(Proctored results only — no scored practice data. The proctored signal is the more reliable one.)' : ''}
+${basis === 'combined' ? '(Both practice and proctored data available — weight the proctored results more heavily for selection calls.)' : ''}
+
+OUTPUT FORMAT (respond as valid JSON, no markdown fences):
+{
+  "aiSummary": "2-4 sentence honest read of where this ${partner ? 'pair' : 'candidate'} stands right now",
+  "strengths": ["2-4 specific strengths, citing data where possible"],
+  "weaknesses": ["2-4 specific weaknesses or risks"]${partner ? `,
+  "complementarity": "1-2 sentence assessment of how they complement (or fail to complement) each other"` : ''},
+  "recommendation": "1-2 sentence coaching note for the instructor — what to watch for, what to drill, whether to lock them in or wait"
+}`
+
+  return { prompt, basis }
+}
+
+export async function createCandidateEvaluationAction(input: {
+  domainId: string
+  userId: string
+  pairPartnerId?: string | null
+  evaluationBasis: 'practice_only' | 'proctored_only' | 'combined'
+  aiSummary: string
+  strengths: string[]
+  weaknesses: string[]
+  complementarity?: string
+  recommendation?: string
+  rawPayload?: string
+}): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
+  const user = await requireStaffForDomain(input.domainId)
+
+  if (input.aiSummary.trim().length < 10) return { ok: false, error: 'AI summary is too short.' }
+
+  const eval_ = await db.candidateEvaluation.create({
+    data: {
+      domain: { connect: { id: input.domainId } },
+      user: { connect: { id: input.userId } },
+      pairedWith: input.pairPartnerId ? { connect: { id: input.pairPartnerId } } : undefined,
+      evaluatedBy_: { connect: { id: user.id } },
+      evaluationBasis: input.evaluationBasis,
+      aiSummary: input.aiSummary.trim(),
+      strengths: JSON.stringify(input.strengths.filter(s => s.trim().length)),
+      weaknesses: JSON.stringify(input.weaknesses.filter(w => w.trim().length)),
+      complementarity: input.complementarity?.trim() || null,
+      recommendation: input.recommendation?.trim() || null,
+      rawPayload: input.rawPayload || '{}',
+    },
+  })
+
+  await db.appEvent.create({
+    data: {
+      kind: 'candidate-evaluated',
+      title: `Candidate evaluation recorded: ${input.evaluationBasis}`,
+      detail: `by ${user.nickname}`,
+    },
+  })
+
+  revalidatePath('/')
+  return { ok: true, id: eval_.id }
+}
+
+// Suggest pairs for paired domains (Java, Quiz Bee). Returns all possible
+// 2-student combinations ranked by a simple heuristic: combined assessment
+// avg + combined streak, with a small bonus for complementary weakness profiles
+// (different weakness tags). The staff still makes the final call.
+export async function suggestPairsAction(domainId: string): Promise<Array<{
+  a: { userId: string; nickname: string; avatarId: string }
+  b: { userId: string; nickname: string; avatarId: string }
+  combinedAssessmentAvg: number
+  combinedStreak: number
+  sharedWeaknesses: string[]
+  distinctWeaknesses: string[]
+  latestEvalId: string | null
+}>> {
+  await requireStaffForDomain(domainId)
+
+  const data = await listCandidateEvaluationsAction(domainId)
+  // Only consider students who have at least one assessment submission OR a proctored score
+  const eligible = data.candidates.filter(c => c.assessmentCount > 0 || c.proctoredScore !== null)
+  if (eligible.length < 2) return []
+
+  // Fetch weakness tags per student
+  const weaknessByUser = new Map<string, Set<string>>()
+  for (const c of eligible) {
+    const subs = await db.submission.findMany({
+      where: { userId: c.userId, milestone: { domainId } },
+      select: { weaknessTags: true },
+    })
+    const tags = new Set<string>()
+    for (const s of subs) {
+      const arr = JSON.parse(s.weaknessTags || '[]') as string[]
+      for (const t of arr) if (t.trim()) tags.add(t.trim())
+    }
+    weaknessByUser.set(c.userId, tags)
+  }
+
+  const pairs = []
+  for (let i = 0; i < eligible.length; i++) {
+    for (let j = i + 1; j < eligible.length; j++) {
+      const a = eligible[i], b = eligible[j]
+      const combinedAvg = (a.assessmentAvg * a.assessmentCount + b.assessmentAvg * b.assessmentCount) / Math.max(1, a.assessmentCount + b.assessmentCount)
+      const combinedStreak = a.streak + b.streak
+      const aTags = weaknessByUser.get(a.userId) ?? new Set<string>()
+      const bTags = weaknessByUser.get(b.userId) ?? new Set<string>()
+      const shared = [...aTags].filter(t => bTags.has(t))
+      const distinct = [...aTags, ...bTags].filter(t => !(aTags.has(t) && bTags.has(t)))
+      const latestEval = data.evaluations.find(e =>
+        (e.userId === a.userId && e.pairedWithUserId === b.userId) ||
+        (e.userId === b.userId && e.pairedWithUserId === a.userId)
+      )
+      pairs.push({
+        a: { userId: a.userId, nickname: a.nickname, avatarId: a.avatarId },
+        b: { userId: b.userId, nickname: b.nickname, avatarId: b.avatarId },
+        combinedAssessmentAvg: Math.round(combinedAvg * 10) / 10,
+        combinedStreak,
+        sharedWeaknesses: shared,
+        distinctWeaknesses: distinct,
+        latestEvalId: latestEval?.id ?? null,
+      })
+    }
+  }
+
+  // Rank: higher combinedAvg better, higher streak better, FEWER shared weaknesses better
+  pairs.sort((p, q) =>
+    q.combinedAssessmentAvg - p.combinedAssessmentAvg ||
+    q.combinedStreak - p.combinedStreak ||
+    p.sharedWeaknesses.length - q.sharedWeaknesses.length
+  )
+
+  return pairs.slice(0, 10) // top 10 suggested pairs
 }

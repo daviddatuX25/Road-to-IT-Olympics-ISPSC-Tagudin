@@ -8,6 +8,7 @@ export type ViewKey =
   | 'leaderboard'
   | 'proctored'
   | 'team'
+  | 'leading'
   | 'admin-users'
   | 'admin-milestones'
   | 'profile'

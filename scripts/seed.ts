@@ -526,6 +526,57 @@ Write 150-300 words on:
   await db.appEvent.create({ data: { kind: 'team-selected',       title: 'Java pair finalized',                            detail: 'lia.exe + markbyte selected by Capt. Mara', createdAt: daysAgo(9) } })
   await db.appEvent.create({ data: { kind: 'spotlight',           title: "This week's spotlight: lia.exe",                detail: '4-week Java streak', createdAt: daysAgo(1) } })
 
+  // --- Candidate evaluations (staff-only, from handoff_added.md) ------------
+  // Seed a couple of evaluations so the Leading Candidates panel has data to show.
+  await db.candidateEvaluation.create({
+    data: {
+      domain: { connect: { id: javaDom.id } },
+      user: { connect: { id: lia.id } },
+      pairedWith: { connect: { id: mark.id } },
+      evaluatedBy_: { connect: { id: instructor.id } },
+      evaluationBasis: 'combined',
+      aiSummary: 'lia + mark form a strong pair. lia is the stronger syntactically (consistent 7-9 across assessments) and has the longest streak on the team. mark complements with steady edge-case work. Both struggled with the bitmask difficult-tier problem in W4.',
+      strengths: JSON.stringify(['consistent weekly practice (4-week streak)', 'clean readable code', 'strong on easy + average tier problems']),
+      weaknesses: JSON.stringify(['bitmask DP not intuitive yet', 'palindrome edge cases', 'low confidence under difficult-tier time pressure']),
+      complementarity: 'Strong complementarity — lia leads on syntax/speed, mark catches edge cases. Their one shared weakness (bitmask DP) is a real risk for the difficult tier in November.',
+      recommendation: 'Lock them in as the Java pair. Drill bitmask problems through September. If you have time for one more mock before October, give them a difficult-tier problem under timed conditions to test the nerves.',
+      rawPayload: JSON.stringify({ source: 'seed', basis: 'combined' }),
+      createdAt: daysAgo(8),
+    },
+  })
+
+  await db.candidateEvaluation.create({
+    data: {
+      domain: { connect: { id: javaDom.id } },
+      user: { connect: { id: lia.id } },
+      evaluatedBy_: { connect: { id: lia.id } }, // self-eval by captain (unusual but valid for the demo)
+      evaluationBasis: 'practice_only',
+      aiSummary: 'Early-season read on lia as solo candidate. Strong tutor-mode performance (8-9 average) but no proctored data yet. The difficult-tier assessment in W4 dropped to 7 — flag for follow-up.',
+      strengths: JSON.stringify(['fast on easy tier', 'clean code style', 'good reflection quality']),
+      weaknesses: JSON.stringify(['difficult-tier dropoff', 'bitmask intuition not yet there']),
+      recommendation: 'Too early to lock in for solo Java if the contest format allowed it — keep watching the difficult-tier trend through August.',
+      rawPayload: JSON.stringify({ source: 'seed', basis: 'practice_only' }),
+      createdAt: daysAgo(20),
+    },
+  })
+
+  await db.candidateEvaluation.create({
+    data: {
+      domain: { connect: { id: dbDom.id } },
+      user: { connect: { id: tasha.id } },
+      evaluatedBy_: { connect: { id: instructor.id } },
+      evaluationBasis: 'combined',
+      aiSummary: 'tasha is the clear DB captain. Highest proctored score in the room (70). Strong assessment trajectory. One screenshot failed during the scrimmage — would have placed in the real contest.',
+      strengths: JSON.stringify(['fastest correct submission in scrimmage', 'strong JOIN intuition', 'consistent weekly practice']),
+      weaknesses: JSON.stringify(['screenshot-to-Word documentation workflow needs reps', 'group-by ordering']),
+      recommendation: 'Lock in for DB. Drill the documentation workflow — the screenshot failure cost her a real placement in the scrimmage.',
+      rawPayload: JSON.stringify({ source: 'seed', basis: 'combined' }),
+      createdAt: daysAgo(8),
+    },
+  })
+
+  await db.appEvent.create({ data: { kind: 'candidate-evaluated', title: 'Candidate evaluation recorded: combined', detail: 'by Prof. Reyes', createdAt: daysAgo(8) } })
+
   console.log('Seed complete.')
   console.log('  Admin:       admin@ito.test')
   console.log('  Instructor:  instructor@ito.test')

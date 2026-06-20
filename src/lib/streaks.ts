@@ -4,11 +4,17 @@
 // Rules:
 //  - "Week" = Mon 00:00 – Sun 23:59:59 in Asia/Manila, fixed regardless of device locale.
 //  - A week "counts" for a user/domain if at least one submission landed in it.
-//  - Weeks where the domain had zero active milestones are SKIP weeks: they
-//    neither extend nor break a streak. This protects Sept maintenance mode
-//    and the July diagnostic week.
-//  - Streak is counted backwards from the current week. First non-skip week
-//    without a submission breaks the streak.
+//  - A week with no active milestones is a SKIP week — it neither extends nor
+//    breaks the streak. This is the genuine-downtime path: if the server was
+//    down, the admin paused the season, or no milestones got published that
+//    week, students shouldn't be punished for not submitting. It is NOT a
+//    planned strategy — the season expects consistent milestones every week,
+//    and the streak reflects actual student practice. Skip weeks only happen
+//    when the system genuinely has nothing for the student to submit to.
+//  - Streak is counted backwards from the current week. The current week
+//    without a submission doesn't break the streak (student might still
+//    submit before Sunday 23:59). A past week with active milestones and no
+//    submission breaks the streak.
 //
 // All computation is done in a single utility so client and server agree.
 

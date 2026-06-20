@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import {
   LayoutDashboard, ListChecks, Trophy, ClipboardCheck, Users,
-  UserCog, FileText, UserCircle, LogOut, Menu, X, Loader2,
+  UserCog, FileText, UserCircle, LogOut, Menu, X, Loader2, Sparkles,
 } from 'lucide-react'
 // (Trophy is used for the sidebar brand icon — kept in the main lucide import above.)
 import { Button } from '@/components/ui/button'
@@ -21,6 +21,7 @@ import { TeamSelectionView } from './team-selection-view'
 import { UsersAdmin } from './users-admin'
 import { AdminMilestones } from './admin-milestones'
 import { ProfileSettings } from './profile-settings'
+import { LeadingCandidates } from './leading-candidates'
 import { cn } from '@/lib/utils'
 
 type NavItem = {
@@ -37,6 +38,7 @@ const NAV: NavItem[] = [
   { key: 'leaderboard',       label: 'Leaderboard',        icon: Trophy,          roles: ['admin', 'instructor', 'student'], group: 'main' },
   { key: 'proctored',         label: 'Proctored Mocks',    icon: ClipboardCheck,  roles: ['admin', 'instructor', 'student'], group: 'main' },
   { key: 'team',              label: 'Team Selection',     icon: Users,           roles: ['admin', 'instructor', 'student'], group: 'main' },
+  { key: 'leading',           label: 'Leading Candidates', icon: Sparkles,        roles: ['admin', 'instructor', 'student'], group: 'staff' },
   { key: 'admin-milestones',  label: 'Author Milestones',  icon: FileText,        roles: ['admin', 'instructor', 'student'], group: 'staff' },
   { key: 'admin-users',       label: 'Manage Users',       icon: UserCog,         roles: ['admin'],                         group: 'staff' },
   { key: 'profile',           label: 'Profile',            icon: UserCircle,      roles: ['admin', 'instructor', 'student'], group: 'staff' },
@@ -145,6 +147,7 @@ export function AppShell({ user, onLogout }: { user: SessionUser; onLogout: () =
           {view === 'leaderboard'      && <LeaderboardView currentUser={user} />}
           {view === 'proctored'        && <ProcturedMocksView user={user} />}
           {view === 'team'             && <TeamSelectionView user={user} />}
+          {view === 'leading'          && <LeadingCandidates user={user} />}
           {view === 'admin-users'      && user.role === 'admin' && <UsersAdmin />}
           {view === 'admin-milestones' && <AdminMilestones user={user} />}
           {view === 'profile'          && <ProfileSettings user={user} />}

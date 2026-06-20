@@ -30,6 +30,9 @@ model User {
   teamSelectionsBy    TeamSelection[]  @relation("TeamDecidedBy")
   milestonesCreated   Milestone[]      @relation("MilestoneCreator")
   spotlights          WeeklySpotlight[]
+  evalsAsSubject      CandidateEvaluation[] @relation("EvalSubject")
+  evalsAsPartner      CandidateEvaluation[] @relation("EvalPartner")
+  evalsAsEvaluator    CandidateEvaluation[] @relation("EvalEvaluator")
 }
 
 model Domain {
@@ -40,10 +43,11 @@ model Domain {
   color       String   @default("#16a34a")
   icon        String   @default("Trophy")
 
-  captains         DomainCaptain[]
-  milestones       Milestone[]
-  proctoredMocks   ProctoredMock[]
-  teamSelections   TeamSelection[]
+  captains               DomainCaptain[]
+  milestones             Milestone[]
+  proctoredMocks         ProctoredMock[]
+  teamSelections         TeamSelection[]
+  candidateEvaluations   CandidateEvaluation[]
 }
 
 model DomainCaptain {
@@ -135,6 +139,30 @@ model WeeklySpotlight {
   createdAt DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id])
+}
+
+// Staff-only candidate evaluations — from handoff_added.md.
+// Never writes to TeamSelection automatically. Append-only.
+// Students have NO read path to this table, not even their own row.
+model CandidateEvaluation {
+  id                String   @id @default(cuid())
+  domainId          String
+  userId            String                     // the student being evaluated
+  pairedWithUserId  String?                    // for Java / Quiz Bee suggested pairings
+  evaluatedBy       String                     // captain/instructor who ran it
+  evaluationBasis   String   @default("practice_only")  // 'practice_only' | 'proctored_only' | 'combined'
+  aiSummary         String                     // human-readable read, shown in the panel
+  strengths         String   @default("[]")    // JSON array of strings
+  weaknesses        String   @default("[]")    // JSON array of strings
+  complementarity   String?                    // for pairs: how they complement each other
+  recommendation    String?                    // freeform recommendation note
+  rawPayload        String   @default("{}")    // JSON — full structured AI output, for audit
+  createdAt         DateTime @default(now())
+
+  domain       Domain @relation(fields: [domainId], references: [id])
+  user         User   @relation("EvalSubject", fields: [userId], references: [id])
+  pairedWith   User?  @relation("EvalPartner", fields: [pairedWithUserId], references: [id])
+  evaluatedBy_ User   @relation("EvalEvaluator", fields: [evaluatedBy], references: [id])
 }
 
 model AppEvent {

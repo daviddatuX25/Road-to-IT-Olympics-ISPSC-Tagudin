@@ -104,7 +104,10 @@ export type PhaseKey =
   | 'aug-w2'
   | 'aug-w3'
   | 'aug-w4'
-  | 'sep-maint'
+  | 'sep-w1'
+  | 'sep-w2'
+  | 'sep-w3'
+  | 'sep-w4'
   | 'oct-sprint'
   | 'nov-final'
 
@@ -113,19 +116,21 @@ export type Phase = {
   label: string
   shortLabel: string
   description: string
-  isMaintenance: boolean // skip weeks don't break streaks
   isMockHeavy: boolean
 }
 
 export const PHASES: Phase[] = [
-  { key: 'july-diagnostic', label: 'July — Diagnostic Week',        shortLabel: 'July',     description: 'Diagnostic per domain to find natural strengths. Open trivia nights to recruit.', isMaintenance: false, isMockHeavy: false },
-  { key: 'aug-w1',          label: 'August W1 — Practice Starts',    shortLabel: 'Aug W1',  description: 'Captains per domain take the lead. Real practice cycles begin.', isMaintenance: false, isMockHeavy: false },
-  { key: 'aug-w2',          label: 'August W2 — Practice',           shortLabel: 'Aug W2',  description: 'Weekly reps continue. Spaced-repetition callbacks to earlier material.', isMaintenance: false, isMockHeavy: false },
-  { key: 'aug-w3',          label: 'August W3 — First Scrimmage',    shortLabel: 'Aug W3',  description: 'First scrimmage under timed conditions.', isMaintenance: false, isMockHeavy: true },
-  { key: 'aug-w4',          label: 'August W4 — Practice',           shortLabel: 'Aug W4',  description: 'Continue reps. Captains review scrimmage gaps.', isMaintenance: false, isMockHeavy: false },
-  { key: 'sep-maint',       label: 'September — Maintenance Mode',   shortLabel: 'Sept',    description: 'Optional async milestones only. Streaks survive (skip weeks).', isMaintenance: true,  isMockHeavy: false },
-  { key: 'oct-sprint',      label: 'October — Intensive Sprint',     shortLabel: 'Oct',     description: 'Full-dress mock contests in real restricted environment. Pairs finalized.', isMaintenance: false, isMockHeavy: true },
-  { key: 'nov-final',       label: 'November — Final Taper',         shortLabel: 'Nov',     description: 'High-frequency mocks for speed and nerves, then light review and real rest.', isMaintenance: false, isMockHeavy: true },
+  { key: 'july-diagnostic', label: 'July — Diagnostic Week',        shortLabel: 'July',     description: 'Diagnostic per domain to find natural strengths. Open trivia nights to recruit.', isMockHeavy: false },
+  { key: 'aug-w1',          label: 'August W1 — Practice Starts',    shortLabel: 'Aug W1',  description: 'Captains per domain take the lead. Real practice cycles begin.', isMockHeavy: false },
+  { key: 'aug-w2',          label: 'August W2 — Practice',           shortLabel: 'Aug W2',  description: 'Weekly reps continue. Spaced-repetition callbacks to earlier material.', isMockHeavy: false },
+  { key: 'aug-w3',          label: 'August W3 — First Scrimmage',    shortLabel: 'Aug W3',  description: 'First scrimmage under timed conditions.', isMockHeavy: true },
+  { key: 'aug-w4',          label: 'August W4 — Practice',           shortLabel: 'Aug W4',  description: 'Continue reps. Captains review scrimmage gaps.', isMockHeavy: false },
+  { key: 'sep-w1',          label: 'September W1 — Practice',        shortLabel: 'Sep W1',  description: 'Practice continues. Lighter load if exam season overlaps, but milestones stay consistent — consistency is mastery.', isMockHeavy: false },
+  { key: 'sep-w2',          label: 'September W2 — Practice',        shortLabel: 'Sep W2',  description: 'Practice continues. Spaced-repetition callbacks to August material.', isMockHeavy: false },
+  { key: 'sep-w3',          label: 'September W3 — Practice',        shortLabel: 'Sep W3',  description: 'Practice continues. Optional async milestones if exam season is heavy — but the streak still expects a submission.', isMockHeavy: false },
+  { key: 'sep-w4',          label: 'September W4 — Practice',        shortLabel: 'Sep W4',  description: 'Practice continues. Last week before October sprint — keep the rhythm.', isMockHeavy: false },
+  { key: 'oct-sprint',      label: 'October — Intensive Sprint',     shortLabel: 'Oct',     description: 'Full-dress mock contests in real restricted environment. Pairs finalized.', isMockHeavy: true },
+  { key: 'nov-final',       label: 'November — Final Taper',         shortLabel: 'Nov',     description: 'High-frequency mocks for speed and nerves, then light review and real rest.', isMockHeavy: true },
 ]
 
 export const PHASE_MAP: Record<PhaseKey, Phase> = Object.fromEntries(

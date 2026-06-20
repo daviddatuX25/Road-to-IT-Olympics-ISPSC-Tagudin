@@ -127,7 +127,7 @@ export function ProfileSettings({ user }: { user: SessionUser }) {
             <span className="text-muted-foreground">Asia/Manila · Monday to Sunday</span>
           </p>
           <p className="text-xs text-muted-foreground mt-1">
-            Streaks reset on Monday 00:00 Manila time. Submit at least once to a domain with an active milestone to keep that domain&apos;s streak alive.
+            Streaks reset on Monday 00:00 Manila time. Submit at least once to a domain with an active milestone to keep that domain&apos;s streak alive. Missed weeks with active milestones break the streak — consistency is mastery.
           </p>
         </CardContent>
       </Card>
@@ -137,7 +137,7 @@ export function ProfileSettings({ user }: { user: SessionUser }) {
         <Card>
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2"><Flame className="size-4 text-orange-500" /> Your streaks by domain</CardTitle>
-            <CardDescription>Each domain tracks its own streak. Skip weeks (no active milestones) don&apos;t break it.</CardDescription>
+            <CardDescription>Each domain tracks its own streak. Missed weeks with active milestones break it. Weeks with no active milestones (server downtime, admin pause) are automatically skipped.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-2">
             {breakdown.map(b => {

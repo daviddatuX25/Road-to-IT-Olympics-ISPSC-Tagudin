@@ -37,16 +37,18 @@ import type {
   versionMilestoneAction, archiveMilestoneAction, activateMilestoneAction,
   submitGuidedFormAction, submitJsonAction,
   listMySubmissionsAction, listDomainSubmissionsAction,
-  getStreakBreakdownAction, getLeaderboardAction,
+  getStreakBreakdownAction, getLeaderboardAction, getAssessmentLeadersAction,
   listProctoredMocksAction, createProctoredMockAction, deleteProctoredMockAction,
   listTeamSelectionsAction, selectTeamMemberAction, removeTeamSelectionAction,
   createSpotlightAction, listAppEventsAction,
+  listCandidateEvaluationsAction, buildEvaluationPromptAction,
+  createCandidateEvaluationAction, suggestPairsAction,
   getStudentDashboardDataAction, getInstructorDashboardDataAction, getAdminDashboardDataAction,
 } from '@/lib/actions'
-import type { LeaderboardEntry, MilestoneWithMeta } from '@/lib/actions'
+import type { LeaderboardEntry, MilestoneWithMeta, AssessmentLeader, CandidateEvaluationMeta } from '@/lib/actions'
 
 export type {
-  LeaderboardEntry, MilestoneWithMeta,
+  LeaderboardEntry, MilestoneWithMeta, AssessmentLeader, CandidateEvaluationMeta,
 }
 
 // Arg types are inferred from the server action signatures via Parameters<...>.
@@ -122,6 +124,9 @@ export const api = {
   getLeaderboardAction: () =>
     rpc<Awaited<ReturnType<typeof getLeaderboardAction>>>('getLeaderboardAction', []),
 
+  getAssessmentLeadersAction: () =>
+    rpc<Awaited<ReturnType<typeof getAssessmentLeadersAction>>>('getAssessmentLeadersAction', []),
+
   listProctoredMocksAction: (...args: Parameters<typeof listProctoredMocksAction>) =>
     rpc<Awaited<ReturnType<typeof listProctoredMocksAction>>>('listProctoredMocksAction', args),
 
@@ -145,6 +150,18 @@ export const api = {
 
   listAppEventsAction: (...args: Parameters<typeof listAppEventsAction>) =>
     rpc<Awaited<ReturnType<typeof listAppEventsAction>>>('listAppEventsAction', args),
+
+  listCandidateEvaluationsAction: (...args: Parameters<typeof listCandidateEvaluationsAction>) =>
+    rpc<Awaited<ReturnType<typeof listCandidateEvaluationsAction>>>('listCandidateEvaluationsAction', args),
+
+  buildEvaluationPromptAction: (...args: Parameters<typeof buildEvaluationPromptAction>) =>
+    rpc<Awaited<ReturnType<typeof buildEvaluationPromptAction>>>('buildEvaluationPromptAction', args),
+
+  createCandidateEvaluationAction: (...args: Parameters<typeof createCandidateEvaluationAction>) =>
+    rpc<Awaited<ReturnType<typeof createCandidateEvaluationAction>>>('createCandidateEvaluationAction', args),
+
+  suggestPairsAction: (...args: Parameters<typeof suggestPairsAction>) =>
+    rpc<Awaited<ReturnType<typeof suggestPairsAction>>>('suggestPairsAction', args),
 
   getStudentDashboardDataAction: () =>
     rpc<Awaited<ReturnType<typeof getStudentDashboardDataAction>>>('getStudentDashboardDataAction', []),
