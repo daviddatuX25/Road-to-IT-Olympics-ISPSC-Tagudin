@@ -75,6 +75,14 @@ export type SessionUser = {
   realName: string | null
   studentId: string | null
   avatarId: string
+  captainOf?: Array<{
+    domainId: string
+    domain: {
+      id: string
+      key: string
+      name: string
+    }
+  }>
 }
 
 export async function getSession(): Promise<SessionUser | null> {
@@ -99,6 +107,18 @@ export async function getSession(): Promise<SessionUser | null> {
       realName: true,
       studentId: true,
       avatarId: true,
+      captainOf: {
+        select: {
+          domainId: true,
+          domain: {
+            select: {
+              id: true,
+              key: true,
+              name: true,
+            },
+          },
+        },
+      },
     },
   })
   if (!user) return null

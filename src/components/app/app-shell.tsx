@@ -85,7 +85,20 @@ export function AppShell({ user, onLogout }: { user: SessionUser; onLogout: () =
     setMobileOpen(false)
   }
 
-  const visibleNav = NAV.filter(n => n.roles.includes(user.role))
+  const visibleNav = NAV.filter(n => {
+    if (n.group === 'staff') {
+      if (user.role === 'admin' || user.role === 'instructor') {
+        return n.roles.includes(user.role)
+      }
+      if (user.role === 'student') {
+        const isCaptain = (user.captainOf?.length ?? 0) > 0
+        if (!isCaptain) return false
+        return (n.key === 'leading' || n.key === 'admin-milestones') && n.roles.includes('student')
+      }
+      return false
+    }
+    return n.roles.includes(user.role)
+  })
   const mainNav = visibleNav.filter(n => n.group === 'main')
   const staffNav = visibleNav.filter(n => n.group === 'staff')
   const avatar = getAvatar(user.avatarId)
@@ -178,12 +191,12 @@ export function AppShell({ user, onLogout }: { user: SessionUser; onLogout: () =
           {view === 'proctored'        && <ProcturedMocksView user={user} />}
           {view === 'team'             && <TeamSelectionView user={user} />}
           {view === 'help'             && <HelpView />}
-          {view === 'leading'          && <LeadingCandidates user={user} />}
+          {view === 'leading'          && (user.role === 'admin' || user.role === 'instructor' || (user.captainOf?.length ?? 0) > 0) && <LeadingCandidates user={user} />}
           {view === 'admin-users'      && user.role === 'admin' && <UsersAdmin />}
           {view === 'admin-domains'    && user.role === 'admin' && <DomainsAdmin />}
           {view === 'admin-prompts'    && (user.role === 'admin' || user.role === 'instructor') && <PromptsAdmin />}
           {view === 'admin-seasons'    && user.role === 'admin' && <SeasonsAdmin />}
-          {view === 'admin-milestones' && <AdminMilestones user={user} />}
+          {view === 'admin-milestones' && (user.role === 'admin' || user.role === 'instructor' || (user.captainOf?.length ?? 0) > 0) && <AdminMilestones user={user} />}
           {view === 'profile'          && <ProfileSettings user={user} />}
         </main>
 

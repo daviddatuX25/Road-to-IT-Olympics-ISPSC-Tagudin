@@ -55,6 +55,9 @@ export function ProcturedMocksView({ user }: { user: SessionUser }) {
   }, [domainFilter])
 
   const isStaff = user.role === 'admin' || user.role === 'instructor'
+  const captainedDomainIds = user.captainOf?.map(c => c.domainId) || []
+  const isCaptainOfAny = captainedDomainIds.length > 0
+  const canManage = isStaff || isCaptainOfAny
 
   return (
     <div className="space-y-4">
@@ -89,9 +92,11 @@ export function ProcturedMocksView({ user }: { user: SessionUser }) {
             <CardTitle className="text-base">Proctored mock results</CardTitle>
             <CardDescription>Recorded by instructors or domain captains. Visible to all — but notes are private to staff.</CardDescription>
           </div>
-          <Button onClick={() => setOpen(true)}>
-            <Plus className="size-4 mr-1" /> Enter result
-          </Button>
+          {canManage && (
+            <Button onClick={() => setOpen(true)}>
+              <Plus className="size-4 mr-1" /> Enter result
+            </Button>
+          )}
         </CardHeader>
         <CardContent>
           <div className="mb-4">
@@ -123,7 +128,7 @@ export function ProcturedMocksView({ user }: { user: SessionUser }) {
                     <TableHead className="text-right">Score</TableHead>
                     <TableHead>Date</TableHead>
                     <TableHead>Entered by</TableHead>
-                    {isStaff && <TableHead className="w-10"></TableHead>}
+                    {canManage && <TableHead className="w-10"></TableHead>}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -151,7 +156,7 @@ export function ProcturedMocksView({ user }: { user: SessionUser }) {
                         <TableCell className="text-right font-mono tabular-nums font-medium">{m.score}</TableCell>
                         <TableCell className="text-sm text-muted-foreground">{new Date(m.eventDate).toLocaleDateString()}</TableCell>
                         <TableCell className="text-sm text-muted-foreground">{m.enteredBy.nickname}</TableCell>
-                        {isStaff && (
+                        {(isStaff || captainedDomainIds.includes(m.domainId)) && (
                           <TableCell>
                             <Button
                               variant="ghost" size="icon"
@@ -175,15 +180,16 @@ export function ProcturedMocksView({ user }: { user: SessionUser }) {
         </CardContent>
       </Card>
 
-      <EntryDialog open={open} onOpenChange={setOpen} onSaved={() => { setOpen(false); void load() }} />
+      <EntryDialog open={open} onOpenChange={setOpen} onSaved={() => { setOpen(false); void load() }} user={user} />
     </div>
   )
 }
 
-function EntryDialog({ open, onOpenChange, onSaved }: {
+function EntryDialog({ open, onOpenChange, onSaved, user }: {
   open: boolean
   onOpenChange: (v: boolean) => void
   onSaved: () => void
+  user: SessionUser
 }) {
   const [students, setStudents] = useState<Awaited<ReturnType<typeof api.listUsersAction>>>([])
   const [domainId, setDomainId] = useState('')
@@ -203,10 +209,15 @@ function EntryDialog({ open, onOpenChange, onSaved }: {
         setStudents(us.filter(u => u.role === 'student'))
         // Resolve domain keys to real IDs so createProctoredMockAction gets a cuid
         const domainList = await api.listDomainsAction()
-        setDomains(domainList)
+        // For student captains, restrict domains to their own
+        const isStaff = user.role === 'admin' || user.role === 'instructor'
+        const allowedDomains = isStaff
+          ? domainList
+          : domainList.filter(d => user.captainOf?.some(c => c.domainId === d.id))
+        setDomains(allowedDomains)
         // If a key was previously stored (pre-fix), migrate it to the real ID
-        if (domainId && !domainList.find(d => d.id === domainId)) {
-          const d = domainList.find(x => x.key === domainId)
+        if (domainId && !allowedDomains.find(d => d.id === domainId)) {
+          const d = allowedDomains.find(x => x.key === domainId)
           if (d) setDomainId(d.id)
         }
       } catch {

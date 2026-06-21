@@ -33,13 +33,18 @@ export function AdminMilestones({ user }: { user: SessionUser }) {
   async function load() {
     // Show all milestones (draft + active + archived) for staff/captains
     const milestonesData = await api.listMilestoneMetaAction()
-    setMilestones(milestonesData)
+    if (user.role === 'student') {
+      const captainedDomainIds = user.captainOf?.map(c => c.domainId) || []
+      setMilestones(milestonesData.filter(m => captainedDomainIds.includes(m.domainId)))
+    } else {
+      setMilestones(milestonesData)
+    }
   }
 
   useEffect(() => { void load() }, [])
 
   if (versionView) {
-    return <VersionDetail milestone={versionView} onBack={() => setVersionView(null)} onEdit={() => {
+    return <VersionDetail milestone={versionView} user={user} onBack={() => setVersionView(null)} onEdit={() => {
       setEditorOpen({ mode: 'version', milestone: versionView })
       setVersionView(null)
     }} />
@@ -134,6 +139,7 @@ export function AdminMilestones({ user }: { user: SessionUser }) {
 
       {editorOpen && (
         <MilestoneEditor
+          user={user}
           mode={editorOpen.mode}
           milestone={'milestone' in editorOpen ? editorOpen.milestone : undefined}
           onClose={() => setEditorOpen(null)}
@@ -144,14 +150,16 @@ export function AdminMilestones({ user }: { user: SessionUser }) {
   )
 }
 
-function VersionDetail({ milestone, onBack, onEdit }: {
+function VersionDetail({ milestone, onBack, onEdit, user }: {
   milestone: MilestoneWithMeta
   onBack: () => void
   onEdit: () => void
+  user: SessionUser
 }) {
   const [, startTransition] = useTransition()
   const [detail, setDetail] = useState<Awaited<ReturnType<typeof api.getMilestoneAction>> | null>(null)
   const { selectMilestone, setView } = useApp()
+  const isAuthorized = user.role === 'admin' || user.role === 'instructor' || user.captainOf?.some(c => c.domainId === milestone.domainId)
 
   useEffect(() => {
     void (async () => {
@@ -226,30 +234,34 @@ function VersionDetail({ milestone, onBack, onEdit }: {
           )}
 
           <div className="flex gap-2 pt-2 border-t">
-            {milestone.isLocked ? (
-              <Button onClick={onEdit}>
-                <History className="size-4 mr-1.5" /> Create new version
-              </Button>
-            ) : (
+            {isAuthorized && (
               <>
-                {milestone.status === 'draft' && (
-                  <Button onClick={activate}>
-                    <FileText className="size-4 mr-1.5" /> Publish (set active)
+                {milestone.isLocked ? (
+                  <Button onClick={onEdit}>
+                    <History className="size-4 mr-1.5" /> Create new version
                   </Button>
+                ) : (
+                  <>
+                    {milestone.status === 'draft' && (
+                      <Button onClick={activate}>
+                        <FileText className="size-4 mr-1.5" /> Publish (set active)
+                      </Button>
+                    )}
+                    {milestone.status === 'active' && (
+                      <Button variant="outline" onClick={archive}>
+                        <Archive className="size-4 mr-1.5" /> Archive
+                      </Button>
+                    )}
+                    {milestone.status === 'archived' && (
+                      <Button variant="outline" onClick={activate}>
+                        <FileText className="size-4 mr-1.5" /> Re-activate
+                      </Button>
+                    )}
+                    <Button variant="outline" onClick={onEdit}>
+                      <Edit3 className="size-4 mr-1.5" /> Edit (will create new version once locked)
+                    </Button>
+                  </>
                 )}
-                {milestone.status === 'active' && (
-                  <Button variant="outline" onClick={archive}>
-                    <Archive className="size-4 mr-1.5" /> Archive
-                  </Button>
-                )}
-                {milestone.status === 'archived' && (
-                  <Button variant="outline" onClick={activate}>
-                    <FileText className="size-4 mr-1.5" /> Re-activate
-                  </Button>
-                )}
-                <Button variant="outline" onClick={onEdit}>
-                  <Edit3 className="size-4 mr-1.5" /> Edit (will create new version once locked)
-                </Button>
               </>
             )}
             <Button variant="ghost" onClick={() => { selectMilestone(milestone.id); setView('milestones') }}>
@@ -262,16 +274,22 @@ function VersionDetail({ milestone, onBack, onEdit }: {
   )
 }
 
-function MilestoneEditor({ mode, milestone, onClose, onSaved }: {
+function MilestoneEditor({ mode, milestone, onClose, onSaved, user }: {
   mode: 'create' | 'version' | 'edit'
   milestone?: MilestoneWithMeta
   onClose: () => void
   onSaved: () => void
+  user: SessionUser
 }) {
   const { domains, phases } = useApp()
+  // Filter domains to captained domains if student
+  const allowedDomains = user.role === 'admin' || user.role === 'instructor'
+    ? domains
+    : domains.filter(d => user.captainOf?.some(c => c.domain.key === d.key))
+
   // Seed fields from existing milestone when versioning/editing
   const initial = milestone
-  const [domainKey, setDomainKey] = useState(initial?.domain.key ?? domains?.[0]?.key ?? '')
+  const [domainKey, setDomainKey] = useState(initial?.domain.key ?? allowedDomains?.[0]?.key ?? '')
   const [weekOrPhase, setWeekOrPhase] = useState(initial?.weekOrPhase ?? phases?.[2]?.key ?? phases?.[0]?.key ?? '')
   const [modeVal, setModeVal] = useState<'tutor' | 'assessment' | 'journal'>(initial?.mode as 'tutor' | 'assessment' | 'journal' ?? 'tutor')
   const [difficulty, setDifficulty] = useState<'easy' | 'average' | 'difficult'>(initial?.difficulty as 'easy' | 'average' | 'difficult' ?? 'easy')
@@ -280,10 +298,10 @@ function MilestoneEditor({ mode, milestone, onClose, onSaved }: {
   const [templates, setTemplates] = useState<Awaited<ReturnType<typeof api.listSystemPromptTemplatesAction>>>([])
 
   useEffect(() => {
-    if (!domainKey && domains.length > 0) {
-      setDomainKey(domains[0].key)
+    if (!domainKey && allowedDomains.length > 0) {
+      setDomainKey(allowedDomains[0].key)
     }
-  }, [domains, domainKey])
+  }, [allowedDomains, domainKey])
 
   useEffect(() => {
     if (!weekOrPhase && phases.length > 0) {
@@ -395,7 +413,7 @@ function MilestoneEditor({ mode, milestone, onClose, onSaved }: {
               <Select value={domainKey} onValueChange={setDomainKey} disabled={mode !== 'create'}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {domains.map(d => <SelectItem key={d.key} value={d.key}>{d.name}</SelectItem>)}
+                  {allowedDomains.map(d => <SelectItem key={d.key} value={d.key}>{d.name}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>

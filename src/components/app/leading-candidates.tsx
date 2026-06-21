@@ -51,7 +51,7 @@ type SuggestedPair = {
 
 export function LeadingCandidates({ user }: { user: SessionUser }) {
   const [dbDomains, setDbDomains] = useState<Awaited<ReturnType<typeof api.listDomainsAction>>>([])
-  const [activeDomain, setActiveDomain] = useState<string>(DOMAINS[0].key)
+  const [activeDomain, setActiveDomain] = useState<string>('')
   const [data, setData] = useState<{ evaluations: CandidateEvaluationMeta[]; candidates: Candidate[] } | null>(null)
   const [pairs, setPairs] = useState<SuggestedPair[] | null>(null)
   const [evalDialog, setEvalDialog] = useState<{ userId: string; pairPartnerId?: string | null } | null>(null)
@@ -61,9 +61,13 @@ export function LeadingCandidates({ user }: { user: SessionUser }) {
     void (async () => {
       try {
         const domains = await api.listDomainsAction()
-        setDbDomains(domains)
-        if (domains.length > 0) {
-          setActiveDomain(domains[0].key)
+        // For student captains, only show their captained domains
+        const allowedDomains = (user.role === 'admin' || user.role === 'instructor')
+          ? domains
+          : domains.filter(d => user.captainOf?.some(c => c.domain.key === d.key))
+        setDbDomains(allowedDomains)
+        if (allowedDomains.length > 0) {
+          setActiveDomain(allowedDomains[0].key)
         }
       } catch (err) {
         console.error('Failed to load domains', err)
@@ -73,6 +77,7 @@ export function LeadingCandidates({ user }: { user: SessionUser }) {
 
   async function load() {
     setData(null); setPairs(null)
+    if (!activeDomain) return
     const domainId = await resolveDomainId(activeDomain)
     if (!domainId) return
     const [d, p] = await Promise.all([
@@ -112,35 +117,39 @@ export function LeadingCandidates({ user }: { user: SessionUser }) {
         </CardContent>
       </Card>
 
-      <Tabs value={activeDomain} onValueChange={setActiveDomain}>
-        <TabsList className="w-full justify-start overflow-x-auto flex-wrap h-auto">
-          {(dbDomains.length > 0 ? dbDomains : DOMAINS).map(d => {
-            const Icon = getDomainIcon(d.icon)
-            return (
-              <TabsTrigger key={d.key} value={d.key} className="gap-1.5">
-                <Icon className="size-3.5" /> {d.shortName || d.key}
-                {d.pairBased && <Users className="size-3 text-muted-foreground" />}
-              </TabsTrigger>
-            )
-          })}
-        </TabsList>
+      {dbDomains.length === 0 ? (
+        <p className="text-sm text-muted-foreground py-8 text-center">No domains available. You may not have captain access to any domain.</p>
+      ) : (
+        <Tabs value={activeDomain} onValueChange={setActiveDomain}>
+          <TabsList className="w-full justify-start overflow-x-auto flex-wrap h-auto">
+            {dbDomains.map(d => {
+              const Icon = getDomainIcon(d.icon)
+              return (
+                <TabsTrigger key={d.key} value={d.key} className="gap-1.5">
+                  <Icon className="size-3.5" /> {d.shortName || d.key}
+                  {d.pairBased && <Users className="size-3 text-muted-foreground" />}
+                </TabsTrigger>
+              )
+            })}
+          </TabsList>
 
-        {(dbDomains.length > 0 ? dbDomains : DOMAINS).map(d => (
-          <TabsContent key={d.key} value={d.key}>
-            {activeDomain === d.key && (
-              <DomainCandidatesPanel
-                domainKey={d.key}
-                data={data}
-                pairs={pairs}
-                user={user}
-                onRunEval={(userId, pairPartnerId) => setEvalDialog({ userId, pairPartnerId: pairPartnerId ?? null })}
-                onViewHistory={(userId) => setHistoryDialog({ userId })}
-                onChanged={load}
-              />
-            )}
-          </TabsContent>
-        ))}
-      </Tabs>
+          {dbDomains.map(d => (
+            <TabsContent key={d.key} value={d.key}>
+              {activeDomain === d.key && (
+                <DomainCandidatesPanel
+                  domainKey={d.key}
+                  data={data}
+                  pairs={pairs}
+                  user={user}
+                  onRunEval={(userId, pairPartnerId) => setEvalDialog({ userId, pairPartnerId: pairPartnerId ?? null })}
+                  onViewHistory={(userId) => setHistoryDialog({ userId })}
+                  onChanged={load}
+                />
+              )}
+            </TabsContent>
+          ))}
+        </Tabs>
+      )}
 
       {evalDialog && (
         <EvaluationDialog

@@ -206,9 +206,17 @@ export async function listMilestoneMetaAction(filters?: {
   if (filters?.weekOrPhase) where.weekOrPhase = filters.weekOrPhase
 
   const session = await getSession()
-  // For students, only show active or archived (no draft). For instructors/admins, all.
+  // For students, only show active or archived (no draft), EXCEPT for domains they captain.
   if (session?.role === 'student') {
-    where.status = { in: ['active', 'archived'] }
+    const captainedDomainIds = session.captainOf?.map(c => c.domainId) || []
+    if (captainedDomainIds.length > 0) {
+      where.OR = [
+        { domainId: { in: captainedDomainIds } },
+        { status: { in: ['active', 'archived'] } },
+      ]
+    } else {
+      where.status = { in: ['active', 'archived'] }
+    }
   }
 
   return db.milestone.findMany({
