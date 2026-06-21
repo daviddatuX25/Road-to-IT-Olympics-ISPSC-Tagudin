@@ -34,6 +34,8 @@ const ALLOWED: ReadonlySet<string> = new Set([
   'createUserAction',
   'updateUserRoleAction',
   'deleteUserAction',
+  'bulkUpdateUserStatusAction',
+  'bulkDeleteUsersAction',
   'assignCaptainAction',
   'removeCaptainAction',
   'listDomainsAction',

@@ -179,6 +179,7 @@ import type {
   loginAction, logoutAction, getCurrentUser, updateProfileAction,
   requestPasswordResetAction, resetPasswordAction,
   listUsersAction, createUserAction, updateUserRoleAction, deleteUserAction,
+  bulkUpdateUserStatusAction, bulkDeleteUsersAction,
   assignCaptainAction, removeCaptainAction,
   registerAction, listPendingUsersAction, approveUserAction, rejectUserAction, bulkCreateUsersAction,
   listDomainsAction,
@@ -243,6 +244,12 @@ export const api = {
 
   deleteUserAction: (...args: Parameters<typeof deleteUserAction>) =>
     rpc<Awaited<ReturnType<typeof deleteUserAction>>>('deleteUserAction', args),
+
+  bulkUpdateUserStatusAction: (...args: Parameters<typeof bulkUpdateUserStatusAction>) =>
+    rpc<Awaited<ReturnType<typeof bulkUpdateUserStatusAction>>>('bulkUpdateUserStatusAction', args),
+
+  bulkDeleteUsersAction: (...args: Parameters<typeof bulkDeleteUsersAction>) =>
+    rpc<Awaited<ReturnType<typeof bulkDeleteUsersAction>>>('bulkDeleteUsersAction', args),
 
   assignCaptainAction: (...args: Parameters<typeof assignCaptainAction>) =>
     rpc<Awaited<ReturnType<typeof assignCaptainAction>>>('assignCaptainAction', args),

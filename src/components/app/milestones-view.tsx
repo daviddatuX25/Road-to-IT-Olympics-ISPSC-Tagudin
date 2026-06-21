@@ -5,7 +5,7 @@ import { MilestoneWithMeta } from '@/lib/api-client'
 import { useEffect, useState, useTransition, useMemo, createElement } from 'react'
 import {
   Loader2, ArrowLeft, Copy, Check, Filter, Plus, Lock, Archive,
-  FileText, Sparkles, ClipboardList, Code2, X, Save,
+  FileText, Sparkles, ClipboardList, Code2, X, Save, Gamepad2, List, Compass,
 } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -32,7 +32,9 @@ export function MilestonesView({ user }: { user: SessionUser }) {
   } = useApp()
 
   const [milestones, setMilestones] = useState<MilestoneWithMeta[] | null>(null)
-  
+  const [completedIds, setCompletedIds] = useState<Set<string>>(new Set())
+  const [viewMode, setViewMode] = useState<'path' | 'list'>('path')
+
   // Resolve domain keys → DB IDs so the filter actually matches server-side.
   const domainIdByKey = useMemo(() => {
     const map: Record<string, string> = {}
@@ -65,13 +67,17 @@ export function MilestonesView({ user }: { user: SessionUser }) {
   }, [milestoneFilterWeek])
 
   async function load() {
-    const data = await api.listMilestoneMetaAction({
-      domainId: domainFilter === 'all' ? undefined : domainFilter,
-      weekOrPhase: weekFilter === 'all' ? undefined : weekFilter,
-      mode: modeFilter === 'all' ? undefined : modeFilter as 'tutor' | 'assessment' | 'journal',
-      status: 'active',
-    })
+    const [data, mySubs] = await Promise.all([
+      api.listMilestoneMetaAction({
+        domainId: domainFilter === 'all' ? undefined : domainFilter,
+        weekOrPhase: weekFilter === 'all' ? undefined : weekFilter,
+        mode: modeFilter === 'all' ? undefined : modeFilter as 'tutor' | 'assessment' | 'journal',
+        status: 'active',
+      }),
+      api.listMySubmissionsAction()
+    ])
     setMilestones(data)
+    setCompletedIds(new Set(mySubs.map(s => s.milestoneId)))
   }
 
   useEffect(() => {
@@ -92,11 +98,37 @@ export function MilestonesView({ user }: { user: SessionUser }) {
   return (
     <div className="space-y-4">
       <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Milestones</CardTitle>
-          <CardDescription>
-            Each milestone is a ready-to-paste AI prompt — open one, copy the prompt, run the session in Claude/Gemini/ChatGPT, then come back and submit.
-          </CardDescription>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
+          <div>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Compass className="size-5 text-emerald-500" /> Milestones
+            </CardTitle>
+            <CardDescription className="max-w-md">
+              Complete practice levels by copying prompts into your AI tutor, then log your submission.
+            </CardDescription>
+          </div>
+          <div className="flex bg-muted p-1 rounded-lg border shrink-0">
+            <button
+              onClick={() => setViewMode('path')}
+              className={cn(
+                "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all",
+                viewMode === 'path' ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              <Gamepad2 className="size-3.5" />
+              Level Path
+            </button>
+            <button
+              onClick={() => setViewMode('list')}
+              className={cn(
+                "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all",
+                viewMode === 'list' ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              <List className="size-3.5" />
+              List
+            </button>
+          </div>
         </CardHeader>
         <CardContent>
           <div className="grid gap-3 sm:grid-cols-3">
@@ -120,6 +152,12 @@ export function MilestonesView({ user }: { user: SessionUser }) {
         <div className="flex justify-center py-12"><Loader2 className="size-6 animate-spin text-muted-foreground" /></div>
       ) : milestones.length === 0 ? (
         <Card><CardContent className="py-12 text-center text-sm text-muted-foreground">No milestones match these filters.</CardContent></Card>
+      ) : viewMode === 'path' ? (
+        <MilestonePathView
+          milestones={milestones}
+          completedIds={completedIds}
+          onOpenMilestone={(id) => selectMilestone(id)}
+        />
       ) : (
         <div className="grid gap-3">
           {milestones.map((m) => (
@@ -531,6 +569,157 @@ function SubmissionForm({ milestoneId, acceptedInputTypes, onSubmit, onCancel }:
   )
 }
 
-void Plus
-void Archive
-void useMemo
+function MilestonePathView({
+  milestones,
+  completedIds,
+  onOpenMilestone,
+}: {
+  milestones: MilestoneWithMeta[]
+  completedIds: Set<string>
+  onOpenMilestone: (id: string) => void
+}) {
+  // Reverse milestones to show progression from early to late
+  const orderedMilestones = useMemo(() => {
+    return [...milestones].reverse()
+  }, [milestones])
+
+  if (orderedMilestones.length === 0) return null
+
+  const height = orderedMilestones.length * 120
+
+  return (
+    <div className="relative py-8 overflow-x-hidden flex justify-center bg-background/30 rounded-2xl border border-border/50">
+      <style>{`
+        @keyframes path-flow {
+          to {
+            stroke-dashoffset: -24;
+          }
+        }
+        .animate-path-flow {
+          stroke-dasharray: 8, 4;
+          animation: path-flow 1.2s linear infinite;
+        }
+        @keyframes pulse-glow {
+          0%, 100% {
+            box-shadow: 0 0 5px var(--glow-color), 0 0 10px var(--glow-color);
+          }
+          50% {
+            box-shadow: 0 0 20px var(--glow-color), 0 0 35px var(--glow-color);
+          }
+        }
+        .completed-glow {
+          animation: pulse-glow 2s infinite ease-in-out;
+        }
+      `}</style>
+
+      <div className="relative w-[320px] shrink-0" style={{ height: `${height}px` }}>
+        {/* SVG connector path connecting all level nodes */}
+        <div className="absolute inset-0 pointer-events-none">
+          <svg className="w-full h-full" style={{ height: `${height}px` }} width="320" height={height}>
+            <path
+              d={orderedMilestones.map((_, index) => {
+                const y = index * 120 + 32
+                const x = index % 2 === 0 ? 80 : 240
+                return `${index === 0 ? 'M' : 'L'} ${x} ${y}`
+              }).join(' ')}
+              fill="none"
+              stroke="currentColor"
+              className="text-border"
+              strokeWidth="4"
+              strokeLinecap="round"
+            />
+            <path
+              d={orderedMilestones.map((_, index) => {
+                const y = index * 120 + 32
+                const x = index % 2 === 0 ? 80 : 240
+                return `${index === 0 ? 'M' : 'L'} ${x} ${y}`
+              }).join(' ')}
+              fill="none"
+              stroke="currentColor"
+              className="text-primary animate-path-flow"
+              strokeWidth="4"
+              strokeLinecap="round"
+            />
+          </svg>
+        </div>
+
+        {/* Level nodes */}
+        {orderedMilestones.map((m, index) => {
+          const isCompleted = completedIds.has(m.id)
+          const domain = domainMeta(m.domain.key)
+          const DomainIcon = getDomainIcon(m.domain.icon)
+          const diff = difficultyMeta(m.difficulty)
+          
+          const isEven = index % 2 === 0
+
+          return (
+            <div
+              key={m.id}
+              className="absolute w-full h-16 transition-all duration-300 group"
+              style={{ top: `${index * 120}px` }}
+            >
+              {/* Level Circle Bubble */}
+              <button
+                onClick={() => onOpenMilestone(m.id)}
+                className={cn(
+                  "absolute size-16 rounded-full flex flex-col items-center justify-center border-4 transition-all duration-300 z-10 shadow-lg hover:scale-110",
+                  isEven ? "left-[48px]" : "left-[208px]",
+                  isCompleted 
+                    ? "bg-background text-foreground completed-glow" 
+                    : "bg-muted text-muted-foreground border-border/80 hover:border-muted-foreground"
+                )}
+                style={isCompleted ? { 
+                  borderColor: domain.color,
+                  '--glow-color': `${domain.color}40`
+                } as React.CSSProperties : {}}
+              >
+                {isCompleted ? (
+                  <div className="relative flex flex-col items-center justify-center">
+                    <DomainIcon className="size-6 text-foreground" style={{ color: domain.color }} />
+                    <span className="absolute -bottom-2 bg-emerald-500 text-white rounded-full p-0.5 border border-background">
+                      <Check className="size-2.5 stroke-[4]" />
+                    </span>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center">
+                    <span className="text-[9px] uppercase font-bold tracking-wider opacity-60">Lvl</span>
+                    <span className="text-sm font-black font-mono leading-none">{index + 1}</span>
+                  </div>
+                )}
+              </button>
+
+              {/* Level Info Plate */}
+              <div 
+                onClick={() => onOpenMilestone(m.id)}
+                className={cn(
+                  "absolute top-[-4px] w-[144px] p-2.5 rounded-xl border bg-card/90 backdrop-blur-md shadow-sm transition-all duration-300 group-hover:shadow-md cursor-pointer hover:border-primary/40",
+                  isEven ? "left-[128px] text-left" : "right-[128px] text-right"
+                )}
+              >
+                <div className={cn("flex items-center gap-1 mb-1", isEven ? "justify-between" : "justify-between flex-row-reverse")}>
+                  <span className="text-[8px] font-bold uppercase tracking-wider text-muted-foreground truncate">{phaseLabel(m.weekOrPhase)}</span>
+                  <span 
+                    className="text-[8px] font-bold px-1.5 py-0.5 rounded-full capitalize shrink-0"
+                    style={{ background: `${diff.color}15`, color: diff.color }}
+                  >
+                    {diff.label}
+                  </span>
+                </div>
+                <h4 className="text-[11px] font-bold text-foreground line-clamp-1 group-hover:text-primary transition-colors">
+                  {m.title}
+                </h4>
+                <div className={cn("flex items-center gap-1 mt-1 text-[9px] text-muted-foreground font-medium", isEven ? "" : "justify-end")}>
+                  <span className="capitalize">{m.mode}</span>
+                  <span>·</span>
+                  <span className="font-semibold" style={{ color: domain.color }}>
+                    {domain.shortName}
+                  </span>
+                </div>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}

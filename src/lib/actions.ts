@@ -280,6 +280,51 @@ export async function deleteUserAction(userId: string): Promise<{ ok: true } | {
   return { ok: true }
 }
 
+export async function bulkUpdateUserStatusAction(
+  userIds: string[],
+  status: 'active' | 'pending' | 'rejected' | 'suspended' | 'archived'
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const admin = await requireRole('admin')
+  if (!userIds || userIds.length === 0) {
+    return { ok: false, error: 'No user IDs specified.' }
+  }
+  const validStatuses = ['active', 'pending', 'rejected', 'suspended', 'archived']
+  if (!validStatuses.includes(status)) {
+    return { ok: false, error: 'Invalid status.' }
+  }
+  // Prevent admin from archiving or suspending themselves
+  const filteredIds = userIds.filter(id => id !== admin.id)
+  if (filteredIds.length === 0) {
+    return { ok: false, error: 'No valid user accounts to modify.' }
+  }
+
+  await db.user.updateMany({
+    where: { id: { in: filteredIds } },
+    data: { status }
+  })
+
+  revalidatePath('/')
+  return { ok: true }
+}
+
+export async function bulkDeleteUsersAction(userIds: string[]): Promise<{ ok: true } | { ok: false; error: string }> {
+  const admin = await requireRole('admin')
+  if (!userIds || userIds.length === 0) {
+    return { ok: false, error: 'No user IDs specified.' }
+  }
+  const filteredIds = userIds.filter(id => id !== admin.id)
+  if (filteredIds.length === 0) {
+    return { ok: false, error: 'No valid user accounts to delete.' }
+  }
+
+  await db.user.deleteMany({
+    where: { id: { in: filteredIds } }
+  })
+
+  revalidatePath('/')
+  return { ok: true }
+}
+
 export async function assignCaptainAction(userId: string, domainId: string): Promise<{ ok: true } | { ok: false; error: string }> {
   await requireRole('admin')
   try {

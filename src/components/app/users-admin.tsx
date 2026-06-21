@@ -36,6 +36,8 @@ export function UsersAdmin() {
   const [bulkResult, setBulkResult] = useState<any | null>(null)
   const [bulkPending, startBulkTransition] = useTransition()
   const [pendingActionId, setPendingActionId] = useState<string | null>(null)
+  
+  const [selectedUserIds, setSelectedUserIds] = useState<string[]>([])
 
   async function load() {
     const [us, ds, pendingList] = await Promise.all([
@@ -47,6 +49,7 @@ export function UsersAdmin() {
     setDomains(ds)
     setPendingUsers(pendingList)
     setPendingCount(pendingList.length)
+    setSelectedUserIds([]) // Clear selections on reload
   }
 
   useEffect(() => { void load() }, [])
@@ -85,13 +88,105 @@ export function UsersAdmin() {
               </Button>
             </CardHeader>
             <CardContent>
+              {selectedUserIds.length > 0 && (
+                <div className="flex flex-wrap items-center justify-between gap-3 p-3 bg-muted/60 border rounded-lg mb-4 text-sm">
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium text-muted-foreground">
+                      {selectedUserIds.length} user{selectedUserIds.length > 1 ? 's' : ''} selected:
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="text-xs bg-card h-8 hover:bg-muted"
+                      onClick={async () => {
+                        const r = await api.bulkUpdateUserStatusAction(selectedUserIds, 'active')
+                        if (r.ok) {
+                          toast.success('Successfully activated users.')
+                          void load()
+                        } else {
+                          toast.error(r.error)
+                        }
+                      }}
+                    >
+                      Bulk Activate
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="text-xs bg-card h-8 hover:bg-muted text-amber-600 border-amber-200 hover:bg-amber-50 dark:hover:bg-amber-950/20"
+                      onClick={async () => {
+                        const r = await api.bulkUpdateUserStatusAction(selectedUserIds, 'archived')
+                        if (r.ok) {
+                          toast.success('Successfully archived users.')
+                          void load()
+                        } else {
+                          toast.error(r.error)
+                        }
+                      }}
+                    >
+                      Bulk Archive
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="text-xs bg-card h-8 hover:bg-muted text-destructive border-destructive/20 hover:bg-destructive/10"
+                      onClick={async () => {
+                        const r = await api.bulkUpdateUserStatusAction(selectedUserIds, 'suspended')
+                        if (r.ok) {
+                          toast.success('Successfully suspended users.')
+                          void load()
+                        } else {
+                          toast.error(r.error)
+                        }
+                      }}
+                    >
+                      Bulk Suspend
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      className="text-xs h-8"
+                      onClick={async () => {
+                        if (!confirm(`Delete ${selectedUserIds.length} users? This removes all submissions and is completely irreversible.`)) return
+                        const r = await api.bulkDeleteUsersAction(selectedUserIds)
+                        if (r.ok) {
+                          toast.success('Successfully deleted users.')
+                          void load()
+                        } else {
+                          toast.error(r.error)
+                        }
+                      }}
+                    >
+                      Bulk Delete
+                    </Button>
+                  </div>
+                </div>
+              )}
+
               <div className="rounded-md border">
                 <Table>
                   <TableHeader>
                     <TableRow>
+                      <TableHead className="w-12 text-center">
+                        <input
+                          type="checkbox"
+                          className="rounded border-border bg-background text-primary focus:ring-primary h-4 w-4 cursor-pointer"
+                          checked={users.length > 0 && selectedUserIds.length === users.length}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedUserIds(users.map(u => u.id))
+                            } else {
+                              setSelectedUserIds([])
+                            }
+                          }}
+                        />
+                      </TableHead>
                       <TableHead>User</TableHead>
                       <TableHead>Email</TableHead>
                       <TableHead>Role</TableHead>
+                      <TableHead>Status</TableHead>
                       <TableHead>Real name / Student ID</TableHead>
                       <TableHead>Captain of</TableHead>
                       <TableHead className="w-10"></TableHead>
@@ -101,7 +196,21 @@ export function UsersAdmin() {
                     {users.map(u => {
                       const avatar = getAvatar(u.avatarId)
                       return (
-                        <TableRow key={u.id}>
+                        <TableRow key={u.id} className={selectedUserIds.includes(u.id) ? 'bg-muted/40' : ''}>
+                          <TableCell className="text-center">
+                            <input
+                              type="checkbox"
+                              className="rounded border-border bg-background text-primary focus:ring-primary h-4 w-4 cursor-pointer"
+                              checked={selectedUserIds.includes(u.id)}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedUserIds(prev => [...prev, u.id])
+                                } else {
+                                  setSelectedUserIds(prev => prev.filter(id => id !== u.id))
+                                }
+                              }}
+                            />
+                          </TableCell>
                           <TableCell>
                             <div className="flex items-center gap-2">
                               <Avatar className="size-7 border"><AvatarFallback style={{ background: avatar.color, color: 'white' }} className="text-xs">{avatar.glyph}</AvatarFallback></Avatar>
@@ -124,6 +233,33 @@ export function UsersAdmin() {
                                 <SelectItem value="student">Student</SelectItem>
                               </SelectContent>
                             </Select>
+                          </TableCell>
+                          <TableCell>
+                            {u.status === 'active' && (
+                              <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20 text-[10px]">
+                                Active
+                              </Badge>
+                            )}
+                            {u.status === 'pending' && (
+                              <Badge variant="outline" className="bg-amber-500/10 text-amber-600 border-amber-500/20 text-[10px] animate-pulse">
+                                Pending
+                              </Badge>
+                            )}
+                            {u.status === 'rejected' && (
+                              <Badge variant="outline" className="bg-destructive/10 text-destructive border-destructive/20 text-[10px]">
+                                Rejected
+                              </Badge>
+                            )}
+                            {u.status === 'archived' && (
+                              <Badge variant="outline" className="bg-blue-500/10 text-blue-600 border-blue-500/20 text-[10px]">
+                                Archived
+                              </Badge>
+                            )}
+                            {u.status === 'suspended' && (
+                              <Badge variant="outline" className="bg-rose-500/10 text-rose-600 border-rose-500/20 text-[10px] font-semibold">
+                                Suspended
+                              </Badge>
+                            )}
                           </TableCell>
                           <TableCell className="text-xs text-muted-foreground">
                             {u.realName || '—'}{u.studentId && <span className="ml-2 font-mono">{u.studentId}</span>}
