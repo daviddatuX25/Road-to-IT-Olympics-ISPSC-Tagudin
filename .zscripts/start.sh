@@ -79,6 +79,9 @@ if [ -f "./next-service-dist/server.js" ]; then
         echo "🗄️  当前使用外部指定数据库: $DATABASE_URL"
     fi
     
+    echo "🔄 正在同步数据库架构 (db push)..."
+    DATABASE_URL="$DATABASE_URL" bun x prisma@6 db push --accept-data-loss --skip-generate --schema=../prisma/schema.prisma
+
     # 后台启动 Next.js
     bun server.js &
     NEXT_PID=$!

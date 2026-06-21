@@ -19,32 +19,22 @@
 // All computation is done in a single utility so client and server agree.
 
 import { db } from './db'
-import { manilaWeekKey, manilaWeekStartMs } from './timezone'
+import {
+  manilaWeekKey,
+  manilaWeekStartMs,
+  manilaWeekStart,
+  currentManilaWeekStart,
+  weekStartNDaysAgo,
+  lastNWeekStarts
+} from './timezone'
 
-export { manilaWeekKey, manilaWeekStartMs }
-
-
-export function manilaWeekStart(ms: number): Date {
-  return new Date(manilaWeekStartMs(ms))
-}
-
-export function currentManilaWeekStart(): Date {
-  return manilaWeekStart(Date.now())
-}
-
-export function weekStartNDaysAgo(n: number): Date {
-  return new Date(manilaWeekStartMs(Date.now()) - n * 24 * 60 * 60 * 1000)
-}
-
-// Returns the array of week-starts (Manila) for the last `n` weeks inclusive
-// of the current one. Index 0 is the current week.
-export function lastNWeekStarts(n: number): Date[] {
-  const now = manilaWeekStartMs(Date.now())
-  const out: Date[] = []
-  for (let i = 0; i < n; i++) {
-    out.push(new Date(now - i * 7 * 24 * 60 * 60 * 1000))
-  }
-  return out
+export {
+  manilaWeekKey,
+  manilaWeekStartMs,
+  manilaWeekStart,
+  currentManilaWeekStart,
+  weekStartNDaysAgo,
+  lastNWeekStarts
 }
 
 // For a given domain, return the set of week-starts (Manila) where at least

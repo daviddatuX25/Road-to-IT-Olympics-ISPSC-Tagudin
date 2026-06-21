@@ -50,6 +50,7 @@ ENV PORT=3000
 #   /app/Caddyfile
 COPY --from=builder /app/.next/standalone ./next-service-dist
 COPY --from=builder /app/db               ./db
+COPY --from=builder /app/prisma           ./prisma
 
 COPY Caddyfile          ./Caddyfile
 COPY .zscripts/start.sh ./start.sh
