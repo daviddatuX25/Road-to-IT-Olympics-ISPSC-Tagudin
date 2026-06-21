@@ -22,6 +22,9 @@ model User {
   status        String   @default("active") // 'pending' | 'active' | 'rejected'
   createdAt     DateTime @default(now())
 
+  resetToken          String?
+  resetTokenExpiry    DateTime?
+
   captainOf           DomainCaptain[]
   submissions         Submission[]
   proctoredMocksFor   ProctoredMock[]  @relation("MockSubject")

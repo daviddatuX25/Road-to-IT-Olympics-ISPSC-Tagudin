@@ -28,6 +28,8 @@ const ALLOWED: ReadonlySet<string> = new Set([
   'bulkCreateUsersAction',
   'getCurrentUser',
   'updateProfileAction',
+  'requestPasswordResetAction',
+  'resetPasswordAction',
   'listUsersAction',
   'createUserAction',
   'updateUserRoleAction',

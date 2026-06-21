@@ -1,6 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import crypto from 'node:crypto'
 import { db } from '@/lib/db'
 import {
   createSession, destroySession, getSession, requireUser, requireActiveUser, requireRole,
@@ -8,6 +9,7 @@ import {
 } from '@/lib/auth'
 import { AVATAR_MAP } from '@/lib/avatars'
 import { sendDiscordAlert } from '@/lib/discord'
+import { sendResetPasswordEmail } from '@/lib/mail'
 
 // Helper to query active season
 async function getActiveSeason() {
@@ -68,6 +70,83 @@ export async function logoutAction(): Promise<void> {
   revalidatePath('/')
 }
 
+export async function requestPasswordResetAction(identifier: string): Promise<{ ok: true } | { ok: false; error: string }> {
+  const idStr = identifier.trim()
+  if (!idStr) return { ok: false, error: 'Identifier (Username, Student ID, or Email) is required.' }
+
+  const user = await db.user.findFirst({
+    where: {
+      OR: [
+        { studentId: idStr },
+        { studentId: idStr.toUpperCase() },
+        { studentId: idStr.toLowerCase() },
+        { email: idStr.toLowerCase() },
+      ]
+    }
+  })
+
+  if (!user) {
+    return { ok: false, error: 'No account found with that Username / ID.' }
+  }
+
+  // Prevent requesting resetting password via email if they only have placeholder emails in production
+  const isPlaceholder = user.email.endsWith('@ito.local')
+  if (isPlaceholder && process.env.NODE_ENV === 'production' && !process.env.RESEND_API_KEY) {
+    return { ok: false, error: 'This account does not have a recovery email configured. Please contact your administrator.' }
+  }
+
+  const rawToken = crypto.randomBytes(32).toString('hex')
+  const hashedToken = crypto.createHash('sha256').update(rawToken).digest('hex')
+  const expiry = new Date(Date.now() + 3600000) // 1 hour expiration
+
+  await db.user.update({
+    where: { id: user.id },
+    data: {
+      resetToken: hashedToken,
+      resetTokenExpiry: expiry,
+    }
+  })
+
+  const appUrl = process.env.APP_PUBLIC_URL || 'http://localhost:3000'
+  const resetLink = `${appUrl}/reset-password?token=${rawToken}`
+
+  const mailRes = await sendResetPasswordEmail(user.email, resetLink)
+  if (!mailRes.ok) {
+    return { ok: false, error: mailRes.error || 'Failed to send recovery email.' }
+  }
+
+  return { ok: true }
+}
+
+export async function resetPasswordAction(token: string, newPassword: string): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!token) return { ok: false, error: 'Password reset token is missing.' }
+  if (!newPassword || newPassword.length < 8) return { ok: false, error: 'Password must be at least 8 characters long.' }
+
+  const hashedToken = crypto.createHash('sha256').update(token).digest('hex')
+
+  const user = await db.user.findFirst({
+    where: {
+      resetToken: hashedToken,
+      resetTokenExpiry: { gt: new Date() },
+    }
+  })
+
+  if (!user) {
+    return { ok: false, error: 'The password reset link is invalid or has expired.' }
+  }
+
+  await db.user.update({
+    where: { id: user.id },
+    data: {
+      passwordHash: hashPassword(newPassword),
+      resetToken: null,
+      resetTokenExpiry: null,
+    }
+  })
+
+  return { ok: true }
+}
+
 export async function getCurrentUser() {
   return getSession()
 }
@@ -76,16 +155,39 @@ export async function getCurrentUser() {
 // Profile
 // -----------------------------------------------------------------------------
 
-export async function updateProfileAction(input: { nickname: string; avatarId: string }): Promise<{ ok: true } | { ok: false; error: string }> {
+export async function updateProfileAction(input: { nickname: string; avatarId: string; email?: string }): Promise<{ ok: true } | { ok: false; error: string }> {
   const user = await requireUser()
   const trimmed = input.nickname.trim()
   if (trimmed.length < 2) return { ok: false, error: 'Nickname must be at least 2 characters.' }
   if (trimmed.length > 32) return { ok: false, error: 'Nickname too long (max 32 chars).' }
   if (!AVATAR_MAP[input.avatarId]) return { ok: false, error: 'Unknown avatar.' }
 
+  let emailToSet = user.email
+  if (input.email !== undefined) {
+    const trimmedEmail = input.email.trim().toLowerCase()
+    if (trimmedEmail !== user.email) {
+      if (trimmedEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+        return { ok: false, error: 'Invalid email address format.' }
+      }
+
+      // If custom email is cleared, default back to placeholder student email.
+      const finalEmail = trimmedEmail || `${user.studentId?.toLowerCase() || user.id.toLowerCase()}@ito.local`
+
+      if (finalEmail !== user.email) {
+        const existingEmail = await db.user.findFirst({
+          where: { email: finalEmail, id: { not: user.id } }
+        })
+        if (existingEmail) {
+          return { ok: false, error: 'Email is already in use by another account.' }
+        }
+        emailToSet = finalEmail
+      }
+    }
+  }
+
   await db.user.update({
     where: { id: user.id },
-    data: { nickname: trimmed, avatarId: input.avatarId },
+    data: { nickname: trimmed, avatarId: input.avatarId, email: emailToSet },
   })
   revalidatePath('/')
   return { ok: true }

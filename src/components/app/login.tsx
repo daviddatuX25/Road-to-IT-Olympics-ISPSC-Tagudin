@@ -74,7 +74,12 @@ export function Login({ onLogin }: { onLogin: () => void }) {
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="password">Password</Label>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="password">Password</Label>
+                  <a href="/forgot-password" className="text-xs text-emerald-600 dark:text-emerald-400 hover:underline">
+                    Forgot password?
+                  </a>
+                </div>
                 <Input
                   id="password"
                   type="password"

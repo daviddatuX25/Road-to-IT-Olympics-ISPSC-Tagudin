@@ -177,6 +177,7 @@ async function rpc<T>(action: string, args: unknown[]): Promise<T> {
 // they just go through fetch() under the hood.
 import type {
   loginAction, logoutAction, getCurrentUser, updateProfileAction,
+  requestPasswordResetAction, resetPasswordAction,
   listUsersAction, createUserAction, updateUserRoleAction, deleteUserAction,
   assignCaptainAction, removeCaptainAction,
   registerAction, listPendingUsersAction, approveUserAction, rejectUserAction, bulkCreateUsersAction,
@@ -224,6 +225,12 @@ export const api = {
 
   updateProfileAction: (...args: Parameters<typeof updateProfileAction>) =>
     rpc<Awaited<ReturnType<typeof updateProfileAction>>>('updateProfileAction', args),
+
+  requestPasswordResetAction: (...args: Parameters<typeof requestPasswordResetAction>) =>
+    rpc<Awaited<ReturnType<typeof requestPasswordResetAction>>>('requestPasswordResetAction', args),
+
+  resetPasswordAction: (...args: Parameters<typeof resetPasswordAction>) =>
+    rpc<Awaited<ReturnType<typeof resetPasswordAction>>>('resetPasswordAction', args),
 
   listUsersAction: () =>
     rpc<Awaited<ReturnType<typeof listUsersAction>>>('listUsersAction', []),

@@ -20,8 +20,10 @@ import { format } from 'date-fns'
 import { cn } from '@/lib/utils'
 
 export function ProfileSettings({ user }: { user: SessionUser }) {
+  const isPlaceholderEmail = user.email.endsWith('@ito.local')
   const [nickname, setNickname] = useState(user.nickname)
   const [avatarId, setAvatarId] = useState(user.avatarId)
+  const [email, setEmail] = useState(isPlaceholderEmail ? '' : user.email)
   const [pending, startTransition] = useTransition()
   const [breakdown, setBreakdown] = useState<Awaited<ReturnType<typeof api.getStreakBreakdownAction>> | null>(null)
 
@@ -31,11 +33,12 @@ export function ProfileSettings({ user }: { user: SessionUser }) {
 
   const weekStart = currentManilaWeekStart()
   const avatar = getAvatar(avatarId)
-  const dirty = nickname !== user.nickname || avatarId !== user.avatarId
+  const initialEmail = isPlaceholderEmail ? '' : user.email
+  const dirty = nickname !== user.nickname || avatarId !== user.avatarId || email !== initialEmail
 
   function save() {
     startTransition(async () => {
-      const r = await api.updateProfileAction({ nickname, avatarId })
+      const r = await api.updateProfileAction({ nickname, avatarId, email })
       if (r.ok) {
         toast.success('Profile updated.')
       } else {
@@ -81,18 +84,31 @@ export function ProfileSettings({ user }: { user: SessionUser }) {
             </div>
           </div>
 
-          <div className="space-y-1.5">
+  <div className="space-y-1.5">
             <Label htmlFor="nickname">Nickname (public)</Label>
             <Input id="nickname" value={nickname} onChange={(e) => setNickname(e.target.value)} maxLength={32} />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="email">Recovery Email (private, for password recovery)</Label>
+            <Input
+              id="email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder={isPlaceholderEmail ? 'No recovery email set (e.g. name@domain.com)' : user.email}
+              maxLength={100}
+            />
+            {isPlaceholderEmail && (
+              <p className="text-[11px] text-amber-600 dark:text-amber-400">
+                ⚠️ You currently have a default placeholder email. Please set a real recovery email to use password recovery features.
+              </p>
+            )}
           </div>
 
           <Separator />
 
           <div className="grid gap-3 sm:grid-cols-2">
-            <div className="space-y-1">
-              <Label className="text-xs text-muted-foreground">Email</Label>
-              <p className="text-sm font-mono">{user.email}</p>
-            </div>
             <div className="space-y-1">
               <Label className="text-xs text-muted-foreground">Role</Label>
               <p className="text-sm capitalize">{user.role}</p>
