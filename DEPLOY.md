@@ -64,6 +64,7 @@ The SQLite DB lives at `/app/db/custom.db` inside the container and is mounted o
 **named volume (`rio-db`)** in `docker-compose.yml`. This means:
 
 - ✅ Data survives container restarts and image rebuilds.
+- ✅ The database schema is automatically synced at container startup, so you do not need to run manual migration commands when redeploying new versions.
 - ⚠️ Data does **NOT** carry over if you delete the volume or switch deploy methods.
 
 To seed a fresh Dokploy deploy with your local DB data:

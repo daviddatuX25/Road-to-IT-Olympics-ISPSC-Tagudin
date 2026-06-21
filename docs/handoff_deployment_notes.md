@@ -121,7 +121,7 @@ Dokploy will automatically parse this and provision a persistent named volume ca
 ---
 
 ### Step 5: Run the First Deploy
-1. Click **Deploy**. Dokploy will pull the repository/compose config, run database migrations, build the Next.js static files, and start up the containers.
+1. Click **Deploy**. Dokploy will pull the repository/compose config and build the image. On container startup, the database schema is automatically synchronized to match the latest schema.prisma and default seed data is verified.
 2. Visit `https://your-app-domain.com` and verify the landing page loads.
 3. Test registering a user and logging in to ensure HTTPS cookies are active and working!
 
