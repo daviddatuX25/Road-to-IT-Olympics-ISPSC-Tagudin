@@ -1,7 +1,7 @@
 'use client'
 
 import { api } from '@/lib/api-client'
-import { useState, useTransition, useMemo } from 'react'
+import { useState, useMemo } from 'react'
 import { Loader2, ArrowLeft, CheckCircle2, ChevronDown, ChevronUp, Eye, EyeOff, Check, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -24,7 +24,7 @@ export function RegistrationForm({
   const [avatarId, setAvatarId] = useState('avatar-01')
   const [showAvatars, setShowAvatars] = useState(false)
   const [registered, setRegistered] = useState(false)
-  const [pending, startTransition] = useTransition()
+  const [pending, setPending] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirm, setShowConfirm] = useState(false)
 
@@ -78,17 +78,18 @@ export function RegistrationForm({
       return
     }
 
-    startTransition(async () => {
-      const loadingId = toast.loading('Submitting your registration…')
-      try {
-        const res = await api.registerAction({
-          studentId: sId,
-          nickname: nick,
-          realName: real,
-          password,
-          avatarId,
-        })
+    setPending(true)
+    const loadingId = toast.loading('Submitting your registration…')
+    api.registerAction({
+      studentId: sId,
+      nickname: nick,
+      realName: real,
+      password,
+      avatarId,
+    })
+      .then((res) => {
         toast.dismiss(loadingId)
+        setPending(false)
         if (res.ok) {
           toast.success('Registration submitted! Welcome to the program.')
           if (onLogin) {
@@ -99,11 +100,12 @@ export function RegistrationForm({
         } else {
           toast.error(res.error)
         }
-      } catch (err: any) {
+      })
+      .catch((err) => {
         toast.dismiss(loadingId)
+        setPending(false)
         toast.error(err.message || 'An unexpected error occurred.')
-      }
-    })
+      })
   }
 
   if (registered) {
