@@ -5,7 +5,6 @@ services:
       dockerfile: Dockerfile
     container_name: rio
     ports:
-      - "3000:3000"   # Next.js directly (useful for debugging)
       - "81:81"       # Caddy reverse proxy (the "official" entrypoint)
     environment:
       - NODE_ENV=production
