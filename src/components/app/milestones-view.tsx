@@ -32,14 +32,45 @@ export function MilestonesView({ user }: { user: SessionUser }) {
   } = useApp()
 
   const [milestones, setMilestones] = useState<MilestoneWithMeta[] | null>(null)
-  const [domainFilter, setDomainFilter] = useState<string>(milestoneFilterDomain ?? 'all')
+  // Resolve domain keys → DB IDs so the filter actually matches server-side.
+  // (The milestone filter passes a domainId to the API, but the dropdown was
+  // using domain keys like 'java' as values, which never match a cuid.)
+  const [domainIdByKey, setDomainIdByKey] = useState<Record<string, string>>({})
+  // Normalize any incoming preset to an ID. If it's already a cuid, keep it;
+  // otherwise map it through the key→id table.
+  const resolveDomain = (val: string | null): string => {
+    if (!val || val === 'all') return 'all'
+    if (domainIdByKey[val]) return domainIdByKey[val]
+    return val
+  }
+  const [domainFilter, setDomainFilter] = useState<string>(resolveDomain(milestoneFilterDomain) ?? 'all')
   const [weekFilter, setWeekFilter] = useState<string>(milestoneFilterWeek ?? 'all')
   const [modeFilter, setModeFilter] = useState<string>('all')
 
+  // Load the domain key→id map once on mount.
+  useEffect(() => {
+    void (async () => {
+      const domains = await api.listDomainsAction()
+      const map: Record<string, string> = {}
+      for (const d of domains) map[d.key] = d.id
+      setDomainIdByKey(map)
+      // If we were preset with a domain key (e.g. 'java' from the dashboard
+      // before the fix shipped), translate it to its ID now that we have the map.
+      if (milestoneFilterDomain && map[milestoneFilterDomain]) {
+        setDomainFilter(map[milestoneFilterDomain])
+      }
+    })()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   // Keep store in sync if user navigated from dashboard with a filter preset
   useEffect(() => {
-    if (milestoneFilterDomain) setDomainFilter(milestoneFilterDomain)
+    if (milestoneFilterDomain) {
+      const resolved = resolveDomain(milestoneFilterDomain)
+      if (resolved !== 'all') setDomainFilter(resolved)
+    }
     if (milestoneFilterWeek) setWeekFilter(milestoneFilterWeek)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [milestoneFilterDomain, milestoneFilterWeek])
 
   async function load() {
@@ -79,7 +110,15 @@ export function MilestonesView({ user }: { user: SessionUser }) {
         <CardContent>
           <div className="grid gap-3 sm:grid-cols-3">
             <FilterSelect label="Domain" value={domainFilter} onChange={setDomainFilter}
-              options={[{ value: 'all', label: 'All domains' }, ...DOMAINS.map(d => ({ value: d.key, label: d.name }))]}
+              options={[
+                { value: 'all', label: 'All domains' },
+                // Wait until the key→id map resolves so the option values are
+                // real domain IDs (not keys). Until then only "All domains"
+                // is selectable, which is fine — the list loads either way.
+                ...DOMAINS
+                  .filter(d => domainIdByKey[d.key])
+                  .map(d => ({ value: domainIdByKey[d.key], label: d.name })),
+              ]}
             />
             <FilterSelect label="Phase / week" value={weekFilter} onChange={setWeekFilter}
               options={[{ value: 'all', label: 'All phases' }, ...PHASES.map(p => ({ value: p.key, label: p.label }))]}
@@ -273,7 +312,11 @@ function MilestoneDetail({ id, user, onBack }: { id: string; user: SessionUser; 
                 </div>
                 <p className="text-xs text-muted-foreground">
                   {formatDistanceToNow(new Date(mySubmission.clientSubmissionTimestamp), { addSuffix: true })}
-                  {mySubmission.inputType === 'guided_form' ? ' via guided form' : ' via JSON paste'}
+                  {mySubmission.inputType === 'guided_form'
+                    ? ' via guided form'
+                    : mySubmission.inputType === 'freeform'
+                      ? ' via freeform paste'
+                      : ' via JSON paste'}
                 </p>
                 {mySubmission.aiScore !== null && (
                   <p className="text-xs mt-1">AI score: <span className="font-mono font-medium">{mySubmission.aiScore}</span></p>
@@ -404,7 +447,11 @@ function SubmissionForm({ milestoneId, acceptedInputTypes, onSubmit, onCancel }:
       } else {
         const result = await api.submitJsonAction({ milestoneId, jsonPayload, aiShareLink: shareLink.trim() || undefined })
         if (result.ok) {
-          toast.success('JSON submission recorded. Streak updated.')
+          toast.success(
+            result.mode === 'freeform'
+              ? 'Saved as a freeform reflection. Streak updated.'
+              : 'Submission recorded. Streak updated.',
+          )
           onSubmit()
         } else {
           toast.error(result.error)
@@ -469,8 +516,10 @@ function SubmissionForm({ milestoneId, acceptedInputTypes, onSubmit, onCancel }:
       {tab === 'json' && (
         <div className="space-y-3">
           <p className="text-xs text-muted-foreground">
-            Paste the JSON the AI session returned. The app extracts <code>score</code>, <code>confidence</code>,
-            <code>weaknessTags</code>, and <code>reflection</code> if present, and stores the rest of the payload as-is.
+            Paste the AI session output. If it&apos;s JSON, the app extracts <code>score</code>, <code>confidence</code>,
+            <code>weaknessTags</code>, and <code>reflection</code> and stores the rest as-is. If it isn&apos;t JSON
+            (e.g. a tutor or journal session that returned prose), the whole response is saved as your reflection —
+            the streak still counts.
           </p>
           <Textarea
             value={jsonPayload}

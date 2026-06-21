@@ -32,7 +32,23 @@ export default function Home() {
   }
 
   if (user === null) {
-    return <Login onLogin={() => setUser(undefined)} />
+    return (
+      <Login
+        onLogin={async () => {
+          // Re-fetch the session directly. Setting user to `undefined` alone
+          // would re-trigger the loading screen, but the initial useEffect
+          // only depends on the stable `startTransition`, so it never re-runs
+          // and the spinner hangs until a manual refresh. Fetching here
+          // resolves the new session cookie set by loginAction immediately.
+          try {
+            const u = await api.getCurrentUser()
+            setUser(u)
+          } catch {
+            setUser(null)
+          }
+        }}
+      />
+    )
   }
 
   return (

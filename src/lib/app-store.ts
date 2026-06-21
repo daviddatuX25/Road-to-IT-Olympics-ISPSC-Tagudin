@@ -12,6 +12,7 @@ export type ViewKey =
   | 'admin-users'
   | 'admin-milestones'
   | 'profile'
+  | 'help'
 
 type AppState = {
   view: ViewKey

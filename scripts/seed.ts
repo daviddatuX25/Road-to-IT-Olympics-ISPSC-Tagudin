@@ -13,15 +13,17 @@
 //  - A handful of app events
 
 import { PrismaClient } from '@prisma/client'
-import { hashPassword } from '../src/lib/auth'
 
 const db = new PrismaClient()
 
+// Precomputed scrypt hash for password "olypmics2026" (format: scrypt$<salt-b64>$<hash-b64>).
+// Inlined so the seed can run inside the runtime container, where the compiled
+// standalone build has no `src/` tree to import `hashPassword` from.
+const passwordHash =
+  'scrypt$dYzmcS7GHuc+iWlll4wARA==$itpkznSobeC1nABRWQ2Xj6iimHZwLtM/zDxfS2OMXI0='
+
 async function main() {
   console.log('Seeding…')
-
-  // --- Users ----------------------------------------------------------------
-  const passwordHash = hashPassword('olypmics2026')
 
   const admin = await db.user.create({
     data: {

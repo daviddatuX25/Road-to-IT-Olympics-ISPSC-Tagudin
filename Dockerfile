@@ -21,7 +21,7 @@ ENV NEXT_TELEMETRY_DISABLED=1
 RUN bun run db:generate && bun run build
 
 # Sync the bundled DB's schema (mirrors .zscripts/build.sh)
-RUN DATABASE_URL="file:/app/db/custom.db" bun run db:push
+RUN DATABASE_URL="file:/app/db/custom.db" bun run db:push --accept-data-loss
 
 
 # ── Stage 2: Runtime ────────────────────────────────────────────

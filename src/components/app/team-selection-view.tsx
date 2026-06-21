@@ -16,6 +16,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from '@/components/ui/dialog'
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel,
+  AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
+  AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { toast } from 'sonner'
 import { getAvatar } from '@/lib/avatars'
 import { DOMAINS, domainMeta } from '@/lib/domains'
@@ -26,9 +31,15 @@ export function TeamSelectionView({ user }: { user: SessionUser }) {
   const [selections, setSelections] = useState<Awaited<ReturnType<typeof listTeamSelectionsAction>> | null>(null)
   const [activeDomain, setActiveDomain] = useState<string>(DOMAINS[0].key)
   const [open, setOpen] = useState(false)
+  const [users, setUsers] = useState<Awaited<ReturnType<typeof listUsersAction>> | null>(null)
 
   async function load() {
-    setSelections(await api.listTeamSelectionsAction())
+    const [sels, us] = await Promise.all([
+      api.listTeamSelectionsAction(),
+      api.listUsersAction().catch(() => [])
+    ])
+    setSelections(sels)
+    setUsers(us)
   }
 
   useEffect(() => { void load() }, [])
@@ -36,6 +47,11 @@ export function TeamSelectionView({ user }: { user: SessionUser }) {
   if (!selections) return <div className="flex justify-center py-12"><Loader2 className="size-6 animate-spin text-muted-foreground" /></div>
 
   const isStaff = user.role === 'admin' || user.role === 'instructor'
+  const currentUserFromList = users?.find(u => u.id === user.id)
+  const isCaptainOfDomain = (domainKey: string) => {
+    return currentUserFromList?.captainOf?.some(c => c.domain.key === domainKey) || false
+  }
+  const isCaptain = (currentUserFromList?.captainOf?.length ?? 0) > 0
 
   return (
     <div className="space-y-4">
@@ -50,7 +66,7 @@ export function TeamSelectionView({ user }: { user: SessionUser }) {
               Pair-based contests (Java, Quiz Bee) select two. Solo contests select one. Selections are based ONLY on proctored mock results — practice diagnostics inform but never substitute.
             </p>
           </div>
-          {isStaff && (
+          {(isStaff || isCaptain) && (
             <Button onClick={() => setOpen(true)}>
               <UserPlus className="size-4 mr-1" /> Select member
             </Button>
@@ -76,11 +92,16 @@ export function TeamSelectionView({ user }: { user: SessionUser }) {
                 domainName={d.name}
                 pairBased={d.pairBased}
                 selections={domSelections}
-                isStaff={isStaff}
+                isStaff={isStaff || isCaptainOfDomain(d.key)}
                 currentUserId={user.id}
-                onRemoved={async (uid) => {
-                  await api.removeTeamSelectionAction(domSelections[0].domainId, uid)
-                  void load()
+                onRemoved={async (domainId, uid) => {
+                  try {
+                    await api.removeTeamSelectionAction(domainId, uid)
+                    toast.success('Selection removed.')
+                    void load()
+                  } catch (err) {
+                    toast.error(err instanceof Error ? err.message : 'Could not remove selection.')
+                  }
                 }}
                 onOpen={() => { setActiveDomain(d.key); setOpen(true) }}
               />
@@ -106,13 +127,14 @@ function DomainTeamCard({ domainKey, domainName, pairBased, selections, isStaff,
   selections: Awaited<ReturnType<typeof listTeamSelectionsAction>>
   isStaff: boolean
   currentUserId: string
-  onRemoved: (userId: string) => void
+  onRemoved: (domainId: string, userId: string) => void
   onOpen: () => void
 }) {
   const meta = domainMeta(domainKey)
   const Icon = meta.icon
   const slotsFilled = selections.length
   const slotsNeeded = pairBased ? 2 : 1
+  const [pendingRemove, setPendingRemove] = useState<typeof selections[number] | null>(null)
 
   return (
     <Card>
@@ -169,7 +191,12 @@ function DomainTeamCard({ domainKey, domainName, pairBased, selections, isStaff,
                       )}
                     </div>
                     {isStaff && (
-                      <Button variant="ghost" size="icon" onClick={() => onRemoved(s.userId)}>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        aria-label={`Remove ${s.user.nickname} from ${domainName}`}
+                        onClick={() => setPendingRemove(s)}
+                      >
                         <Trash2 className="size-3.5 text-muted-foreground hover:text-destructive" />
                       </Button>
                     )}
@@ -191,6 +218,31 @@ function DomainTeamCard({ domainKey, domainName, pairBased, selections, isStaff,
           </div>
         )}
       </CardContent>
+
+      {/* Confirm-before-remove dialog. Removal is the eligibility gate being
+          reversed, so we don't let a stray click do it silently. */}
+      <AlertDialog open={!!pendingRemove} onOpenChange={(o) => { if (!o) setPendingRemove(null) }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove selection?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This removes <strong>{pendingRemove?.user.nickname}</strong> from the {domainName} team.
+              The eligibility gate decision is reversed and the slot reopens. This is auditable.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (pendingRemove) onRemoved(pendingRemove.domainId, pendingRemove.userId)
+                setPendingRemove(null)
+              }}
+            >
+              <Trash2 className="size-4 mr-1.5" /> Remove
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Card>
   )
 }
@@ -277,8 +329,9 @@ function SelectMemberDialog({ open, onOpenChange, domainKey, onSaved }: {
   const [pending, startTransition] = useTransition()
 
   useEffect(() => {
-    if (open) {
-      void (async () => {
+    if (!open) return
+    void (async () => {
+      try {
         const us = await api.listUsersAction()
         setStudents(us.filter(u => u.role === 'student'))
         // Look up the domain ID from the leaderboard / domains action
@@ -293,8 +346,10 @@ function SelectMemberDialog({ open, onOpenChange, domainKey, onSaved }: {
           const d = domains.find(x => x.key === domainKey)
           if (d) setDomainId(d.id)
         }
-      })()
-    }
+      } catch {
+        toast.error('Could not load students. You may not have permission.')
+      }
+    })()
   }, [open, domainKey])
 
   function submit() {

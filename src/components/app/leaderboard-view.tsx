@@ -63,7 +63,8 @@ function StreakLeaderboard({ currentUser }: { currentUser: SessionUser }) {
     void load()
   }, [])
 
-  const canSpotlight = currentUser.role === 'admin' || currentUser.role === 'instructor' || currentUser.role === 'student'
+  const myEntry = entries?.find(e => e.userId === currentUser.id)
+  const canSpotlight = currentUser.role === 'admin' || currentUser.role === 'instructor' || !!(myEntry?.isCaptain)
 
   if (!entries) {
     return <div className="flex justify-center py-12"><Loader2 className="size-6 animate-spin text-muted-foreground" /></div>
@@ -363,12 +364,15 @@ function SpotlightDialog({ open, onOpenChange, onCreated, canSpotlight }: {
   const [pending, startTransition] = useTransition()
 
   useEffect(() => {
-    if (open && canSpotlight) {
-      void (async () => {
+    if (!open || !canSpotlight) return
+    void (async () => {
+      try {
         const us = await api.listUsersAction()
         setStudents(us.filter(u => u.role === 'student'))
-      })()
-    }
+      } catch {
+        toast.error('Could not load students. You may not have permission.')
+      }
+    })()
   }, [open, canSpotlight])
 
   function submit() {

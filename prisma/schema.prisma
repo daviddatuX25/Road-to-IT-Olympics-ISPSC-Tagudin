@@ -128,6 +128,11 @@ model TeamSelection {
   domain    Domain @relation(fields: [domainId], references: [id])
   user      User   @relation("TeamSelected", fields: [userId], references: [id])
   decidedBy User   @relation("TeamDecidedBy", fields: [decidedById], references: [id])
+
+  // One selection per (domain, student) — a student can't be "selected" twice
+  // for the same domain. Exposes the `domainId_userId` compound unique selector
+  // used by selectTeamMemberAction / removeTeamSelectionAction.
+  @@unique([domainId, userId])
 }
 
 model WeeklySpotlight {

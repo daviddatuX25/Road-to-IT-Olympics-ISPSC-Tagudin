@@ -285,6 +285,16 @@ function MilestoneEditor({ mode, onClose, onSaved }: {
     setAccepted(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key])
   }
 
+  // When the mode changes, keep accepted input types sensible:
+  //  - assessment → JSON must be accepted (it's how a score reaches the
+  //    assessment leaderboard). Add it if the author hasn't already.
+  function changeMode(next: 'tutor' | 'assessment' | 'journal') {
+    setModeVal(next)
+    if (next === 'assessment' && !accepted.includes('json')) {
+      setAccepted(prev => [...prev, 'json'])
+    }
+  }
+
   function submit() {
     startTransition(async () => {
       if (title.trim().length < 3) { toast.error('Title must be at least 3 characters.'); return }
@@ -375,7 +385,7 @@ function MilestoneEditor({ mode, onClose, onSaved }: {
           <div className="grid gap-3 sm:grid-cols-3">
             <div className="space-y-1.5">
               <Label>Mode</Label>
-              <Select value={modeVal} onValueChange={(v) => setModeVal(v as 'tutor' | 'assessment' | 'journal')}>
+              <Select value={modeVal} onValueChange={(v) => changeMode(v as 'tutor' | 'assessment' | 'journal')}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {MODES.map(m => <SelectItem key={m.key} value={m.key}>{m.label}</SelectItem>)}
@@ -427,11 +437,24 @@ function MilestoneEditor({ mode, onClose, onSaved }: {
                 <Checkbox checked={accepted.includes('guided_form')} onCheckedChange={() => toggleAccepted('guided_form')} />
                 Guided form (score, weaknesses, reflection)
               </label>
-              <label className="flex items-center gap-2 text-sm cursor-pointer">
-                <Checkbox checked={accepted.includes('json')} onCheckedChange={() => toggleAccepted('json')} />
+              <label className={cn('flex items-center gap-2 text-sm', modeVal === 'assessment' ? 'cursor-not-allowed opacity-80' : 'cursor-pointer')}>
+                <Checkbox
+                  checked={accepted.includes('json')}
+                  disabled={modeVal === 'assessment'}
+                  onCheckedChange={() => toggleAccepted('json')}
+                />
                 JSON paste-box
+                {modeVal === 'assessment' && (
+                  <span className="text-[10px] text-muted-foreground">(required for assessment — feeds the leaderboard)</span>
+                )}
               </label>
             </div>
+            {modeVal === 'assessment' && (
+              <p className="text-[11px] text-muted-foreground">
+                Assessment submissions need a <code className="bg-muted px-1 rounded">score</code> in the JSON to land on the
+                assessment leaderboard. JSON stays locked on.
+              </p>
+            )}
           </div>
 
           <div className="flex justify-end gap-2 pt-2 border-t">

@@ -171,6 +171,7 @@ function EntryDialog({ open, onOpenChange, onSaved }: {
 }) {
   const [students, setStudents] = useState<Awaited<ReturnType<typeof listUsersAction>>>([])
   const [domainId, setDomainId] = useState('')
+  const [domains, setDomains] = useState<{ id: string; key: string; name: string }[]>([])
   const [userId, setUserId] = useState('')
   const [partnerId, setPartnerId] = useState('none')
   const [score, setScore] = useState('')
@@ -179,12 +180,23 @@ function EntryDialog({ open, onOpenChange, onSaved }: {
   const [pending, startTransition] = useTransition()
 
   useEffect(() => {
-    if (open) {
-      void (async () => {
+    if (!open) return
+    void (async () => {
+      try {
         const us = await api.listUsersAction()
         setStudents(us.filter(u => u.role === 'student'))
-      })()
-    }
+        // Resolve domain keys to real IDs so createProctoredMockAction gets a cuid
+        const domainList = await api.listDomainsAction()
+        setDomains(domainList)
+        // If a key was previously stored (pre-fix), migrate it to the real ID
+        if (domainId && !domainList.find(d => d.id === domainId)) {
+          const d = domainList.find(x => x.key === domainId)
+          if (d) setDomainId(d.id)
+        }
+      } catch {
+        toast.error('Could not load students. You may not have permission.')
+      }
+    })()
   }, [open])
 
   function submit() {
@@ -224,7 +236,7 @@ function EntryDialog({ open, onOpenChange, onSaved }: {
               <Select value={domainId} onValueChange={setDomainId}>
                 <SelectTrigger><SelectValue placeholder="Pick a domain" /></SelectTrigger>
                 <SelectContent>
-                  {DOMAINS.map(d => <SelectItem key={d.key} value={d.key}>{d.name}</SelectItem>)}
+                  {domains.map(d => <SelectItem key={d.id} value={d.id}>{DOMAINS.find(m => m.key === d.key)?.name ?? d.name}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>

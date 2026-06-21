@@ -56,12 +56,21 @@ export async function updateProfileAction(input: { nickname: string; avatarId: s
 }
 
 // -----------------------------------------------------------------------------
-// Users (admin-only)
+// Users (admin / instructor / captain — mirrors the auth pattern used by
+// selectTeamMemberAction, createProctoredMockAction, etc.)
 // -----------------------------------------------------------------------------
 
 export async function listUsersAction() {
-  const admin = await requireRole('admin')
-  void admin
+  const user = await requireUser()
+  const allowed = user.role === 'admin' || user.role === 'instructor'
+  if (!allowed) {
+    // Students may only read the user list if they captain at least one domain
+    const captaining = await db.domainCaptain.findFirst({
+      where: { userId: user.id },
+      select: { userId: true },
+    })
+    if (!captaining) throw new Error('FORBIDDEN')
+  }
   return db.user.findMany({
     orderBy: { createdAt: 'asc' },
     include: { captainOf: { include: { domain: true } } },
@@ -205,7 +214,7 @@ export async function getMilestoneAction(id: string) {
   //  - private diagnostic data (AI score, weakness tags, reflection, rawPayload):
   //    visible to the student themselves, the domain captain (if not the student),
   //    instructors, and admins. NOT visible to other students.
-  const isAuthor = session.id === milestone.createdById
+  const isAuthor = session.id === milestone.createdBy
   const isStaff = session.role === 'admin' || session.role === 'instructor'
   let isCaptain = false
   if (session.role === 'student') {
@@ -261,6 +270,13 @@ export async function createMilestoneAction(input: {
   if (input.promptTemplate.trim().length < 10) return { ok: false, error: 'Prompt template is too short.' }
   if (input.promptTemplate.length > 50000) return { ok: false, error: 'Prompt template too long (max 50000 chars).' }
 
+  // Assessment milestones must accept JSON — that's the only submission path
+  // that carries a score onto the assessment leaderboard.
+  const effectiveAccepted = input.acceptedInputTypes.length ? input.acceptedInputTypes : ['guided_form']
+  if (input.mode === 'assessment' && !effectiveAccepted.includes('json')) {
+    effectiveAccepted.push('json')
+  }
+
   const milestone = await db.milestone.create({
     data: {
       domain: { connect: { id: input.domainId } },
@@ -270,7 +286,7 @@ export async function createMilestoneAction(input: {
       difficulty: input.difficulty,
       title: input.title.trim(),
       promptTemplate: input.promptTemplate,
-      acceptedInputTypes: JSON.stringify(input.acceptedInputTypes.length ? input.acceptedInputTypes : ['guided_form']),
+      acceptedInputTypes: JSON.stringify(effectiveAccepted),
       status: input.status ?? 'draft',
     },
   })
@@ -315,6 +331,13 @@ export async function versionMilestoneAction(milestoneId: string, updates: {
     await db.milestone.update({ where: { id: old.id }, data: { isLocked: true, status: 'archived' } })
   }
 
+  // Resolve the new mode (defaults to the old one) and enforce the assessment→JSON rule.
+  const newMode = updates.mode ?? old.mode
+  const effectiveAccepted = updates.acceptedInputTypes.length ? [...updates.acceptedInputTypes] : ['guided_form']
+  if (newMode === 'assessment' && !effectiveAccepted.includes('json')) {
+    effectiveAccepted.push('json')
+  }
+
   const newVersion = await db.milestone.create({
     data: {
       domain: { connect: { id: old.domainId } },
@@ -322,11 +345,11 @@ export async function versionMilestoneAction(milestoneId: string, updates: {
       parentMilestoneId: old.id,
       version: old.version + 1,
       weekOrPhase: updates.weekOrPhase ?? old.weekOrPhase,
-      mode: updates.mode ?? old.mode,
+      mode: newMode,
       difficulty: updates.difficulty ?? old.difficulty,
       title: updates.title.trim(),
       promptTemplate: updates.promptTemplate,
-      acceptedInputTypes: JSON.stringify(updates.acceptedInputTypes.length ? updates.acceptedInputTypes : ['guided_form']),
+      acceptedInputTypes: JSON.stringify(effectiveAccepted),
       status: 'active',
     },
   })
@@ -445,30 +468,69 @@ export async function submitJsonAction(input: {
   milestoneId: string
   jsonPayload: string
   aiShareLink?: string
-}): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
+}): Promise<{ ok: true; id: string; mode?: 'json' | 'freeform' } | { ok: false; error: string }> {
   const user = await requireUser()
   const milestone = await db.milestone.findUnique({ where: { id: input.milestoneId } })
   if (!milestone) return { ok: false, error: 'Milestone not found.' }
   if (milestone.status !== 'active') return { ok: false, error: 'Milestone is not active.' }
-  if (input.jsonPayload.length > 100000) return { ok: false, error: 'JSON payload too large (max 100KB).' }
+  if (input.jsonPayload.length > 100000) return { ok: false, error: 'Payload too large (max 100KB).' }
 
-  let parsed: Record<string, unknown>
-  try {
-    parsed = JSON.parse(input.jsonPayload)
-    if (typeof parsed !== 'object' || Array.isArray(parsed) || parsed === null) {
-      return { ok: false, error: 'JSON must be an object.' }
+  const trimmed = input.jsonPayload.trim()
+
+  // Try to parse as JSON. If it parses to an object, extract the standard
+  // fields (score / confidence / weaknessTags / reflection) the way the
+  // assessment leaderboard expects.
+  let parsed: Record<string, unknown> | null = null
+  if (trimmed) {
+    try {
+      const candidate = JSON.parse(trimmed)
+      if (typeof candidate === 'object' && candidate !== null && !Array.isArray(candidate)) {
+        parsed = candidate as Record<string, unknown>
+      }
+    } catch {
+      // Not JSON — fall through to freeform handling below.
+      parsed = null
     }
-  } catch {
-    return { ok: false, error: 'Invalid JSON.' }
   }
 
-  // Try to extract standard fields if present
-  const aiScore = typeof parsed.score === 'number' ? parsed.score : typeof parsed.aiScore === 'number' ? parsed.aiScore : null
-  const confidence = typeof parsed.confidence === 'number' ? parsed.confidence : null
-  const weaknessTags = Array.isArray(parsed.weaknessTags)
-    ? parsed.weaknessTags.filter((t): t is string => typeof t === 'string')
-    : []
-  const reflection = typeof parsed.reflection === 'string' ? parsed.reflection : null
+  // For assessment mode we want a real score on the leaderboard, so a
+  // non-JSON payload is rejected with a clear message rather than silently
+  // saved without one.
+  if (milestone.mode === 'assessment' && !parsed) {
+    return {
+      ok: false,
+      error: 'Assessment milestones need structured JSON with a "score" field so the result lands on the leaderboard. Paste the AI\'s JSON output (or wrap your text as { "score": ..., "reflection": "..." }).',
+    }
+  }
+
+  let aiScore: number | null
+  let confidence: number | null
+  let weaknessTags: string[]
+  let reflection: string | null
+  let rawPayload: string
+  let inputType: 'json' | 'freeform'
+
+  if (parsed) {
+    // Structured JSON path — extract whatever standard fields are present.
+    aiScore = typeof parsed.score === 'number' ? parsed.score : typeof parsed.aiScore === 'number' ? parsed.aiScore : null
+    confidence = typeof parsed.confidence === 'number' ? parsed.confidence : null
+    weaknessTags = Array.isArray(parsed.weaknessTags)
+      ? parsed.weaknessTags.filter((t): t is string => typeof t === 'string')
+      : []
+    reflection = typeof parsed.reflection === 'string' ? parsed.reflection : null
+    rawPayload = JSON.stringify(parsed)
+    inputType = 'json'
+  } else {
+    // Freeform path — tutor / journal sessions where the AI returns prose,
+    // not JSON. We save the whole response as a reflection (so the streak
+    // counts and the captain can read it) and store the raw text as-is.
+    aiScore = null
+    confidence = null
+    weaknessTags = []
+    reflection = trimmed || null
+    rawPayload = JSON.stringify({ source: 'freeform', text: trimmed })
+    inputType = 'freeform'
+  }
 
   const sub = await db.submission.create({
     data: {
@@ -477,19 +539,19 @@ export async function submitJsonAction(input: {
       user: { connect: { id: user.id } },
       clientSubmissionTimestamp: new Date(),
       syncStatus: 'synced',
-      inputType: 'json',
+      inputType,
       aiShareLink: input.aiShareLink?.trim() || null,
       aiScore,
       confidence,
       weaknessTags: JSON.stringify(weaknessTags),
       reflection,
-      rawPayload: JSON.stringify(parsed),
+      rawPayload,
     },
   })
 
   await db.milestone.update({ where: { id: milestone.id }, data: { isLocked: true } })
   revalidatePath('/')
-  return { ok: true, id: sub.id }
+  return { ok: true, id: sub.id, mode: inputType }
 }
 
 export async function listMySubmissionsAction() {
