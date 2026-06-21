@@ -8,6 +8,34 @@ import {
 } from '@/lib/auth'
 import { AVATAR_MAP } from '@/lib/avatars'
 
+// Helper to query active season
+async function getActiveSeason() {
+  const season = await db.season.findFirst({
+    where: { status: 'active' },
+    orderBy: { createdAt: 'desc' },
+  })
+  if (!season) {
+    return await db.season.create({
+      data: {
+        name: 'Default Active Season',
+        startDate: new Date('2026-01-01T00:00:00Z'),
+        endDate: new Date('2026-12-31T23:59:59Z'),
+        status: 'active',
+      },
+    })
+  }
+  return season
+}
+
+export async function getActiveSeasonAction() {
+  return db.season.findFirst({
+    where: { status: 'active' },
+    include: { phases: true },
+    orderBy: { createdAt: 'desc' },
+  })
+}
+
+
 // -----------------------------------------------------------------------------
 // Auth
 // -----------------------------------------------------------------------------
@@ -166,8 +194,12 @@ export async function listMilestoneMetaAction(filters?: {
   status?: 'draft' | 'active' | 'archived'
   mode?: 'tutor' | 'assessment' | 'journal'
   weekOrPhase?: string
+  seasonId?: string
 }) {
-  const where: Record<string, unknown> = {}
+  const activeSeason = await getActiveSeason()
+  const targetSeasonId = filters?.seasonId ?? activeSeason.id
+
+  const where: any = { seasonId: targetSeasonId }
   if (filters?.domainId) where.domainId = filters.domainId
   if (filters?.status) where.status = filters.status
   if (filters?.mode) where.mode = filters.mode
@@ -180,7 +212,7 @@ export async function listMilestoneMetaAction(filters?: {
   }
 
   return db.milestone.findMany({
-    where: where as Parameters<typeof db.milestone.findMany>[0]['where'],
+    where,
     include: {
       domain: true,
       creator: { select: { id: true, nickname: true, avatarId: true } },
@@ -277,9 +309,11 @@ export async function createMilestoneAction(input: {
     effectiveAccepted.push('json')
   }
 
+  const activeSeason = await getActiveSeason()
   const milestone = await db.milestone.create({
     data: {
       domain: { connect: { id: input.domainId } },
+      season: { connect: { id: activeSeason.id } },
       creator: { connect: { id: user.id } },
       weekOrPhase: input.weekOrPhase,
       mode: input.mode,
@@ -341,6 +375,7 @@ export async function versionMilestoneAction(milestoneId: string, updates: {
   const newVersion = await db.milestone.create({
     data: {
       domain: { connect: { id: old.domainId } },
+      season: { connect: { id: old.seasonId } },
       creator: { connect: { id: user.id } },
       parentMilestoneId: old.id,
       version: old.version + 1,
@@ -611,8 +646,9 @@ export async function listDomainSubmissionsAction(domainId: string) {
 
 export async function getStreakBreakdownAction() {
   const user = await requireUser()
+  const activeSeason = await getActiveSeason()
   const { computeStreakBreakdown } = await import('@/lib/streaks')
-  return computeStreakBreakdown(user.id)
+  return computeStreakBreakdown(user.id, activeSeason.id)
 }
 
 export type LeaderboardEntry = {
@@ -631,7 +667,8 @@ export async function getLeaderboardAction(): Promise<LeaderboardEntry[]> {
   const session = await getSession()
   if (!session) return []
 
-  const { computeStreakBreakdown, currentManilaWeekStart } = await import('@/lib/streaks')
+  const activeSeason = await getActiveSeason()
+  const { computeStreakBreakdown, currentManilaWeekStart, manilaWeekKey } = await import('@/lib/streaks')
   const weekStart = currentManilaWeekStart()
   const weekEnd = new Date(weekStart.getTime() + 7 * 24 * 60 * 60 * 1000)
 
@@ -645,31 +682,15 @@ export async function getLeaderboardAction(): Promise<LeaderboardEntry[]> {
 
   const out: LeaderboardEntry[] = []
   for (const s of students) {
-    const breakdown = await computeStreakBreakdown(s.id)
+    const breakdown = await computeStreakBreakdown(s.id, activeSeason.id)
     const bestStreak = Math.max(0, ...breakdown.map(b => b.streak))
     const thisWeekSubmitted = breakdown.some(b => b.thisWeekSubmitted)
-    // Count distinct weeks with at least one submission
+    // Count distinct weeks with at least one submission in active season
     const subs = await db.submission.findMany({
-      where: { userId: s.id },
+      where: { userId: s.id, milestone: { seasonId: activeSeason.id } },
       select: { clientSubmissionTimestamp: true },
     })
-    const weekKeys = new Set(subs.map(sub => {
-      const d = sub.clientSubmissionTimestamp
-      // Manila Monday week key
-      const formatter = new Intl.DateTimeFormat('en-US', {
-        timeZone: 'Asia/Manila',
-        year: 'numeric', month: '2-digit', day: '2-digit',
-      })
-      const parts = formatter.formatToParts(d)
-      const get = (t: string) => parts.find(p => p.type === t)?.value ?? ''
-      const year = Number(get('year'))
-      const month = Number(get('month')) - 1
-      const day = Number(get('day'))
-      const wd = new Date(Date.UTC(year, month, day)).getUTCDay()
-      const weekday = wd === 0 ? 7 : wd
-      const monday = new Date(Date.UTC(year, month, day - (weekday - 1)))
-      return `${monday.getUTCFullYear()}-${String(monday.getUTCMonth() + 1).padStart(2, '0')}-${String(monday.getUTCDate()).padStart(2, '0')}`
-    }))
+    const weekKeys = new Set(subs.map(sub => manilaWeekKey(sub.clientSubmissionTimestamp.getTime())))
     out.push({
       userId: s.id,
       nickname: s.nickname,
@@ -686,7 +707,7 @@ export async function getLeaderboardAction(): Promise<LeaderboardEntry[]> {
 
   // Attach weekly spotlight
   const spotlights = await db.weeklySpotlight.findMany({
-    where: { weekOf: { gte: weekStart } },
+    where: { weekOf: { gte: weekStart }, seasonId: activeSeason.id },
     include: { user: true },
   })
   for (const spot of spotlights) {
@@ -826,7 +847,8 @@ export async function listProctoredMocksAction(filters?: { domainId?: string }) 
   const session = await getSession()
   if (!session) return []
 
-  const where: Record<string, unknown> = {}
+  const activeSeason = await getActiveSeason()
+  const where: any = { seasonId: activeSeason.id }
   if (filters?.domainId) where.domainId = filters.domainId
 
   const isStaff = session.role === 'admin' || session.role === 'instructor'
@@ -839,7 +861,7 @@ export async function listProctoredMocksAction(filters?: { domainId?: string }) 
   }
 
   const mocks = await db.proctoredMock.findMany({
-    where: where as Parameters<typeof db.proctoredMock.findMany>[0]['where'],
+    where,
     include: {
       user: { select: { id: true, nickname: true, avatarId: true, role: true } },
       partner: { select: { id: true, nickname: true, avatarId: true } },
@@ -881,9 +903,11 @@ export async function createProctoredMockAction(input: {
   if (input.score < 0 || input.score > 10000) return { ok: false, error: 'Score out of range.' }
   if (input.notes && input.notes.length > 2000) return { ok: false, error: 'Notes too long (max 2000 chars).' }
 
+  const activeSeason = await getActiveSeason()
   const mock = await db.proctoredMock.create({
     data: {
       domain: { connect: { id: input.domainId } },
+      season: { connect: { id: activeSeason.id } },
       user: { connect: { id: input.userId } },
       partner: input.pairPartnerId ? { connect: { id: input.pairPartnerId } } : undefined,
       score: input.score,
@@ -927,7 +951,9 @@ export async function deleteProctoredMockAction(id: string): Promise<{ ok: true 
 export async function listTeamSelectionsAction() {
   const session = await getSession()
   if (!session) return []
+  const activeSeason = await getActiveSeason()
   const sels = await db.teamSelection.findMany({
+    where: { seasonId: activeSeason.id },
     include: {
       user: { select: { id: true, nickname: true, avatarId: true } },
       domain: true,
@@ -953,14 +979,16 @@ export async function selectTeamMemberAction(input: {
   }
   if (!canSelect) return { ok: false, error: 'Not authorized to select team members.' }
 
+  const activeSeason = await getActiveSeason()
   const existing = await db.teamSelection.findUnique({
-    where: { domainId_userId: { domainId: input.domainId, userId: input.userId } },
+    where: { seasonId_domainId_userId: { seasonId: activeSeason.id, domainId: input.domainId, userId: input.userId } },
   })
   if (existing) return { ok: false, error: 'Already selected.' }
 
   const sel = await db.teamSelection.create({
     data: {
       domain: { connect: { id: input.domainId } },
+      season: { connect: { id: activeSeason.id } },
       user: { connect: { id: input.userId } },
       decidedBy: { connect: { id: user.id } },
       rationale: input.rationale?.trim() || null,
@@ -987,8 +1015,9 @@ export async function removeTeamSelectionAction(domainId: string, userId: string
     canRemove = !!cap
   }
   if (!canRemove) throw new Error('Not authorized')
+  const activeSeason = await getActiveSeason()
   await db.teamSelection.delete({
-    where: { domainId_userId: { domainId, userId } },
+    where: { seasonId_domainId_userId: { seasonId: activeSeason.id, domainId, userId } },
   })
   revalidatePath('/')
 }
@@ -1018,9 +1047,11 @@ export async function createSpotlightAction(input: {
   const { currentManilaWeekStart } = await import('@/lib/streaks')
   const weekOf = currentManilaWeekStart()
 
+  const activeSeason = await getActiveSeason()
   const spot = await db.weeklySpotlight.create({
     data: {
       user: { connect: { id: input.userId } },
+      season: { connect: { id: activeSeason.id } },
       weekOf,
       reason: input.reason,
       blurb: input.blurb.trim(),
@@ -1054,35 +1085,36 @@ export async function listAppEventsAction(limit = 10) {
 
 export async function getStudentDashboardDataAction() {
   const user = await requireUser()
+  const activeSeason = await getActiveSeason()
   const { computeStreakBreakdown, currentManilaWeekStart } = await import('@/lib/streaks')
 
   const weekStart = currentManilaWeekStart()
   const weekEnd = new Date(weekStart.getTime() + 7 * 24 * 60 * 60 * 1000)
 
   const [streakBreakdown, mySubmissions, activeMilestones, myTeamSelections, myMocks, spotlight] = await Promise.all([
-    computeStreakBreakdown(user.id),
+    computeStreakBreakdown(user.id, activeSeason.id),
     db.submission.findMany({
-      where: { userId: user.id },
+      where: { userId: user.id, milestone: { seasonId: activeSeason.id } },
       include: { milestone: { include: { domain: true } } },
       orderBy: { clientSubmissionTimestamp: 'desc' },
       take: 10,
     }),
     db.milestone.findMany({
-      where: { status: 'active' },
+      where: { status: 'active', seasonId: activeSeason.id },
       include: { domain: true, _count: { select: { submissions: true } } },
       orderBy: { createdAt: 'desc' },
     }),
     db.teamSelection.findMany({
-      where: { userId: user.id },
+      where: { userId: user.id, seasonId: activeSeason.id },
       include: { domain: true, decidedBy: { select: { nickname: true } } },
     }),
     db.proctoredMock.findMany({
-      where: { OR: [{ userId: user.id }, { pairPartnerId: user.id }] },
+      where: { OR: [{ userId: user.id }, { pairPartnerId: user.id }], seasonId: activeSeason.id },
       include: { domain: true, partner: { select: { nickname: true } } },
       orderBy: { eventDate: 'desc' },
     }),
     db.weeklySpotlight.findFirst({
-      where: { weekOf: { gte: weekStart }, userId: user.id },
+      where: { weekOf: { gte: weekStart }, userId: user.id, seasonId: activeSeason.id },
     }),
   ])
 
@@ -1100,11 +1132,12 @@ export async function getStudentDashboardDataAction() {
 
 export async function getInstructorDashboardDataAction() {
   await requireRole('admin', 'instructor')
+  const activeSeason = await getActiveSeason()
   const [milestones, submissions, mocks, selections, students, events] = await Promise.all([
-    db.milestone.count(),
-    db.submission.count(),
-    db.proctoredMock.count(),
-    db.teamSelection.count(),
+    db.milestone.count({ where: { seasonId: activeSeason.id } }),
+    db.submission.count({ where: { milestone: { seasonId: activeSeason.id } } }),
+    db.proctoredMock.count({ where: { seasonId: activeSeason.id } }),
+    db.teamSelection.count({ where: { seasonId: activeSeason.id } }),
     db.user.count({ where: { role: 'student' } }),
     db.appEvent.findMany({ orderBy: { createdAt: 'desc' }, take: 10 }),
   ])
@@ -1113,14 +1146,15 @@ export async function getInstructorDashboardDataAction() {
 
 export async function getAdminDashboardDataAction() {
   await requireRole('admin')
+  const activeSeason = await getActiveSeason()
   const [users, domains, captains, milestones, submissions, mocks, selections, events] = await Promise.all([
     db.user.count(),
     db.domain.count(),
     db.domainCaptain.count(),
-    db.milestone.count(),
-    db.submission.count(),
-    db.proctoredMock.count(),
-    db.teamSelection.count(),
+    db.milestone.count({ where: { seasonId: activeSeason.id } }),
+    db.submission.count({ where: { milestone: { seasonId: activeSeason.id } } }),
+    db.proctoredMock.count({ where: { seasonId: activeSeason.id } }),
+    db.teamSelection.count({ where: { seasonId: activeSeason.id } }),
     db.appEvent.findMany({ orderBy: { createdAt: 'desc' }, take: 15 }),
   ])
   return {
@@ -1184,10 +1218,11 @@ export async function listCandidateEvaluationsAction(domainId: string): Promise<
   }>
 }> {
   await requireStaffForDomain(domainId)
+  const activeSeason = await getActiveSeason()
 
   const [evaluations, students, domain] = await Promise.all([
     db.candidateEvaluation.findMany({
-      where: { domainId },
+      where: { domainId, seasonId: activeSeason.id },
       include: {
         user: { select: { id: true, nickname: true, avatarId: true, realName: true, studentId: true } },
         pairedWith: { select: { id: true, nickname: true, avatarId: true } },
@@ -1201,11 +1236,11 @@ export async function listCandidateEvaluationsAction(domainId: string): Promise<
         id: true, nickname: true, avatarId: true, realName: true, studentId: true,
         captainOf: { where: { domainId }, select: { domainId: true } },
         submissions: {
-          where: { milestone: { domainId } },
+          where: { milestone: { domainId, seasonId: activeSeason.id } },
           include: { milestone: { select: { mode: true } } },
         },
         proctoredMocksFor: {
-          where: { domainId },
+          where: { domainId, seasonId: activeSeason.id },
           select: { score: true },
         },
       },
@@ -1217,11 +1252,11 @@ export async function listCandidateEvaluationsAction(domainId: string): Promise<
 
   // Build candidate summary per student
   const { computeStreakForUserDomain } = await import('@/lib/streaks')
-  const candidates = []
+  const candidates: any[] = []
   for (const s of students) {
     const assessmentSubs = s.submissions.filter(sub => sub.milestone.mode === 'assessment' && sub.aiScore !== null)
     const scores = assessmentSubs.map(sub => sub.aiScore ?? 0)
-    const streak = await computeStreakForUserDomain(s.id, domainId)
+    const streak = await computeStreakForUserDomain(s.id, domainId, activeSeason.id)
     const proctored = s.proctoredMocksFor
     const latestEval = evaluations.find(e => e.userId === s.id || e.pairedWithUserId === s.id)
     candidates.push({
@@ -1297,6 +1332,7 @@ export async function buildEvaluationPromptAction(input: {
   pairPartnerId?: string | null
 }): Promise<{ prompt: string; basis: 'practice_only' | 'proctored_only' | 'combined' }> {
   await requireStaffForDomain(input.domainId)
+  const activeSeason = await getActiveSeason()
 
   const [student, domain, partner] = await Promise.all([
     db.user.findUnique({
@@ -1312,18 +1348,18 @@ export async function buildEvaluationPromptAction(input: {
 
   const [submissions, mocks, partnerSubs, partnerMocks] = await Promise.all([
     db.submission.findMany({
-      where: { userId: student.id, milestone: { domainId: domain.id } },
+      where: { userId: student.id, milestone: { domainId: domain.id, seasonId: activeSeason.id } },
       include: { milestone: { select: { title: true, mode: true, difficulty: true, weekOrPhase: true } } },
       orderBy: { clientSubmissionTimestamp: 'desc' },
       take: 30,
     }),
     db.proctoredMock.findMany({
-      where: { userId: student.id, domainId: domain.id },
+      where: { userId: student.id, domainId: domain.id, seasonId: activeSeason.id },
       orderBy: { eventDate: 'desc' },
     }),
     partner
       ? db.submission.findMany({
-          where: { userId: partner.id, milestone: { domainId: domain.id } },
+          where: { userId: partner.id, milestone: { domainId: domain.id, seasonId: activeSeason.id } },
           include: { milestone: { select: { title: true, mode: true, difficulty: true, weekOrPhase: true } } },
           orderBy: { clientSubmissionTimestamp: 'desc' },
           take: 20,
@@ -1331,7 +1367,7 @@ export async function buildEvaluationPromptAction(input: {
       : Promise.resolve([]),
     partner
       ? db.proctoredMock.findMany({
-          where: { userId: partner.id, domainId: domain.id },
+          where: { userId: partner.id, domainId: domain.id, seasonId: activeSeason.id },
           orderBy: { eventDate: 'desc' },
         })
       : Promise.resolve([]),
@@ -1357,44 +1393,56 @@ export async function buildEvaluationPromptAction(input: {
     return mocks.map(m => `  ${who} — ${m.eventDate.toISOString().slice(0, 10)} | score: ${m.score}${m.notes ? ` | notes: "${m.notes.slice(0, 200)}${m.notes.length > 200 ? '…' : ''}"` : ''}`).join('\n')
   }
 
-  const prompt = `You are evaluating ${partner ? 'a candidate pair' : 'a candidate'} for the IT Skills Olympics ${domain.name} team. This is a staff-only read to help a human (the instructor or domain captain) decide whether to select ${partner ? 'them as a pair' : 'them'} for the November competition. Your output is INPUT to a human decision, not the decision itself.
+  // Load the prompt template from the database
+  let promptTemplateObj = await db.systemPromptTemplate.findUnique({
+    where: { name: 'candidate_evaluation' },
+  })
 
-CRITICAL RULES:
-- Be honest, specific, and brief. Avoid hedging fluff.
-- Cite the data you're drawing on (which weeks, which scores).
-- If the data is thin, say so explicitly in plain language — don't invent a confidence score.
-- Don't just summarize; give the staff a useful read. What pattern do you see? What's the risk? What would you want to see more of before locking in the pick?
-- ${partner ? `For pairs: explicitly assess complementarity — do their strengths/weaknesses cover each other? Are there red flags (e.g. both weak on the same thing, both low confidence under time pressure)? MOST IMPORTANTLY: assign roles. Who should take which kind of problem during the contest? Base this on their actual practice data — if A is consistently faster on easy-tier syntax problems and B is stronger on edge-case debugging, say so. The role assignment is the single most useful thing you can produce for a pair; the staff will use it to coach them on division of labor before November.` : 'For solo candidates: focus on readiness, consistency, and trajectory.'}
+  if (!promptTemplateObj) {
+    promptTemplateObj = {
+      id: 'default',
+      name: 'candidate_evaluation',
+      description: 'Default evaluation prompt template',
+      mode: 'assessment',
+      createdAt: new Date(),
+      template: `You are evaluating {{candidate_name}} for the IT Skills Olympics {{domain_name}} team. This is a staff-only read to help a human (the instructor or domain captain) decide whether to select them for the November competition. Your output is INPUT to a human decision, not the decision itself.\n\nCRITICAL RULES:\n- Be honest, specific, and brief. Avoid hedging fluff.\n- Cite the data you\'re drawing on (which weeks, which scores).\n- If the data is thin, say so explicitly in plain language — don\'t invent a confidence score.\n- Don\'t just summarize; give the staff a useful read. What pattern do you see? What\'s the risk? What would you want to see more of before locking in the pick?\n- {{partner_rules}}\n\nDOMAIN: {{domain_name}}\nDOMAIN CONTEXT: {{domain_description}}\nCONTEST FORMAT: {{contest_format}}\n\n{{candidate_identity}}\n\nPRACTICE DATA (most recent first):\n{{practice_data}}\n\nPROCTORED MOCK RESULTS (most recent first):\n{{mock_data}}\n\nEVALUATION BASIS: {{basis}}\n{{basis_guidelines}}\n\nOUTPUT FORMAT (respond as valid JSON, no markdown fences):\n{\n  "aiSummary": "2-4 sentence honest read of where this candidate stands right now",\n  "strengths": ["2-4 specific strengths, citing data where possible"],\n  "weaknesses": ["2-4 specific weaknesses or risks"]{{partner_output_format}},\n  "recommendation": "1-2 sentence coaching note for the instructor — what to watch for, what to drill, whether to lock them in or wait"\n}`,
+    }
+  }
 
-DOMAIN: ${domain.name}
-DOMAIN CONTEXT: ${domain.description ?? '(no description)'}
-CONTEST FORMAT: ${domain.contestFormat}
+  let prompt = promptTemplateObj.template
 
-${partner ? `CANDIDATE A: ${student.nickname}${student.realName ? ` (${student.realName})` : ''}${student.studentId ? ` [${student.studentId}]` : ''}
-CANDIDATE B: ${partner.nickname}${partner.realName ? ` (${partner.realName})` : ''}` : `CANDIDATE: ${student.nickname}${student.realName ? ` (${student.realName})` : ''}${student.studentId ? ` [${student.studentId}]` : ''}`}
+  const partner_rules = partner
+    ? `For pairs: explicitly assess complementarity — do their strengths/weaknesses cover each other? Are there red flags (e.g. both weak on the same thing, both low confidence under time pressure)? MOST IMPORTANTLY: assign roles. Who should take which kind of problem during the contest? Base this on their actual practice data — if A is consistently faster on easy-tier syntax problems and B is stronger on edge-case debugging, say so. The role assignment is the single most useful thing you can produce for a pair; the staff will use it to coach them on division of labor before November.`
+    : `For solo candidates: focus on readiness, consistency, and trajectory.`
 
-PRACTICE DATA (most recent first):
-${formatSubs(submissions, partner ? 'A' : 'Student')}
-${partner ? formatSubs(partnerSubs, 'B') : ''}
+  const candidate_identity = partner
+    ? `CANDIDATE A: ${student.nickname}${student.realName ? ` (${student.realName})` : ''}${student.studentId ? ` [${student.studentId}]` : ''}\nCANDIDATE B: ${partner.nickname}${partner.realName ? ` (${partner.realName})` : ''}`
+    : `CANDIDATE: ${student.nickname}${student.realName ? ` (${student.realName})` : ''}${student.studentId ? ` [${student.studentId}]` : ''}`
 
-PROCTORED MOCK RESULTS (most recent first):
-${formatMocks(mocks, partner ? 'A' : 'Student')}
-${partner ? formatMocks(partnerMocks, 'B') : ''}
+  const practice_data = `${formatSubs(submissions, partner ? 'A' : 'Student')}\n${partner ? formatSubs(partnerSubs, 'B') : ''}`
+  const mock_data = `${formatMocks(mocks, partner ? 'A' : 'Student')}\n${partner ? formatMocks(partnerMocks, 'B') : ''}`
 
-EVALUATION BASIS: ${basis}
-${basis === 'practice_only' ? '(Practice data only — no proctored results yet. Treat this read as tentative; the real signal comes from proctored mocks in October.)' : ''}
-${basis === 'proctored_only' ? '(Proctored results only — no scored practice data. The proctored signal is the more reliable one.)' : ''}
-${basis === 'combined' ? '(Both practice and proctored data available — weight the proctored results more heavily for selection calls.)' : ''}
+  const basis_guidelines = basis === 'practice_only'
+    ? `(Practice data only — no proctored results yet. Treat this read as tentative; the real signal comes from proctored mocks in October.)`
+    : basis === 'proctored_only'
+      ? `(Proctored results only — no scored practice data. The proctored signal is the more reliable one.)`
+      : `(Both practice and proctored data available — weight the proctored results more heavily for selection calls.)`
 
-OUTPUT FORMAT (respond as valid JSON, no markdown fences):
-{
-  "aiSummary": "2-4 sentence honest read of where this ${partner ? 'pair' : 'candidate'} stands right now",
-  "strengths": ["2-4 specific strengths, citing data where possible"],
-  "weaknesses": ["2-4 specific weaknesses or risks"]${partner ? `,
-  "complementarity": "1-2 sentence assessment of how they complement (or fail to complement) each other",
-  "roleAssignment": "Specific role assignment for the contest. Format: 'A handles X (because...); B handles Y (because...)'. Be concrete — reference the problem types, tiers, or phases where each should lead. This is the actionable output the staff will coach to."` : ''},
-  "recommendation": "1-2 sentence coaching note for the instructor — what to watch for, what to drill, whether to lock them in or wait"
-}`
+  const partner_output_format = partner
+    ? `,\n  "complementarity": "1-2 sentence assessment of how they complement (or fail to complement) each other",\n  "roleAssignment": "Specific role assignment for the contest. Format: 'A handles X (because...); B handles Y (because...)'. Be concrete — reference the problem types, tiers, or phases where each should lead. This is the actionable output the staff will coach to."`
+    : ''
+
+  prompt = prompt.replace(/\{\{candidate_name\}\}/g, partner ? 'a candidate pair' : 'a candidate')
+  prompt = prompt.replace(/\{\{domain_name\}\}/g, domain.name)
+  prompt = prompt.replace(/\{\{domain_description\}\}/g, domain.description ?? '(no description)')
+  prompt = prompt.replace(/\{\{contest_format\}\}/g, domain.contestFormat)
+  prompt = prompt.replace(/\{\{partner_rules\}\}/g, partner_rules)
+  prompt = prompt.replace(/\{\{candidate_identity\}\}/g, candidate_identity)
+  prompt = prompt.replace(/\{\{practice_data\}\}/g, practice_data)
+  prompt = prompt.replace(/\{\{mock_data\}\}/g, mock_data)
+  prompt = prompt.replace(/\{\{basis\}\}/g, basis)
+  prompt = prompt.replace(/\{\{basis_guidelines\}\}/g, basis_guidelines)
+  prompt = prompt.replace(/\{\{partner_output_format\}\}/g, partner_output_format)
 
   return { prompt, basis }
 }
@@ -1416,9 +1464,11 @@ export async function createCandidateEvaluationAction(input: {
 
   if (input.aiSummary.trim().length < 10) return { ok: false, error: 'AI summary is too short.' }
 
+  const activeSeason = await getActiveSeason()
   const eval_ = await db.candidateEvaluation.create({
     data: {
       domain: { connect: { id: input.domainId } },
+      season: { connect: { id: activeSeason.id } },
       user: { connect: { id: input.userId } },
       pairedWith: input.pairPartnerId ? { connect: { id: input.pairPartnerId } } : undefined,
       evaluatedBy_: { connect: { id: user.id } },
@@ -1459,6 +1509,7 @@ export async function suggestPairsAction(domainId: string): Promise<Array<{
   latestEvalId: string | null
 }>> {
   await requireStaffForDomain(domainId)
+  const activeSeason = await getActiveSeason()
 
   const data = await listCandidateEvaluationsAction(domainId)
   // Only consider students who have at least one assessment submission OR a proctored score
@@ -1469,7 +1520,7 @@ export async function suggestPairsAction(domainId: string): Promise<Array<{
   const weaknessByUser = new Map<string, Set<string>>()
   for (const c of eligible) {
     const subs = await db.submission.findMany({
-      where: { userId: c.userId, milestone: { domainId } },
+      where: { userId: c.userId, milestone: { domainId, seasonId: activeSeason.id } },
       select: { weaknessTags: true },
     })
     const tags = new Set<string>()
@@ -1480,7 +1531,7 @@ export async function suggestPairsAction(domainId: string): Promise<Array<{
     weaknessByUser.set(c.userId, tags)
   }
 
-  const pairs = []
+  const pairs: any[] = []
   for (let i = 0; i < eligible.length; i++) {
     for (let j = i + 1; j < eligible.length; j++) {
       const a = eligible[i], b = eligible[j]
@@ -1515,3 +1566,238 @@ export async function suggestPairsAction(domainId: string): Promise<Array<{
 
   return pairs.slice(0, 10) // top 10 suggested pairs
 }
+
+// -----------------------------------------------------------------------------
+// System Prompt Templates Management
+// -----------------------------------------------------------------------------
+
+export async function listSystemPromptTemplatesAction() {
+  await requireRole('admin', 'instructor')
+  return db.systemPromptTemplate.findMany({
+    orderBy: { name: 'asc' },
+  })
+}
+
+export async function updateSystemPromptTemplateAction(id: string, template: string, description?: string) {
+  await requireRole('admin', 'instructor')
+  if (template.trim().length < 10) throw new Error('Prompt template is too short.')
+  return db.systemPromptTemplate.update({
+    where: { id },
+    data: {
+      template: template.trim(),
+      ...(description !== undefined ? { description: description.trim() } : {}),
+    },
+  })
+}
+
+// -----------------------------------------------------------------------------
+// Dynamic Domains CRUD (scalable next year seasons too)
+// -----------------------------------------------------------------------------
+
+export async function createDomainAction(data: {
+  key: string
+  name: string
+  shortName?: string
+  description?: string | null
+  color?: string
+  icon?: string
+  practiceNote?: string
+  contestFormat?: string
+  pairBased?: boolean
+  teamSize?: number
+}) {
+  await requireRole('admin')
+  return db.domain.create({
+    data: {
+      key: data.key.trim().toLowerCase(),
+      name: data.name.trim(),
+      shortName: data.shortName?.trim() || '',
+      description: data.description?.trim() || null,
+      color: data.color || '#16a34a',
+      icon: data.icon || 'Trophy',
+      practiceNote: data.practiceNote?.trim() || '',
+      contestFormat: data.contestFormat?.trim() || '',
+      pairBased: data.pairBased ?? false,
+      teamSize: data.teamSize ?? 1,
+    },
+  })
+}
+
+export async function updateDomainAction(
+  id: string,
+  data: {
+    key?: string
+    name?: string
+    shortName?: string
+    description?: string | null
+    color?: string
+    icon?: string
+    practiceNote?: string
+    contestFormat?: string
+    pairBased?: boolean
+    teamSize?: number
+  }
+) {
+  await requireRole('admin')
+  return db.domain.update({
+    where: { id },
+    data: {
+      ...(data.key ? { key: data.key.trim().toLowerCase() } : {}),
+      ...(data.name ? { name: data.name.trim() } : {}),
+      ...(data.shortName !== undefined ? { shortName: data.shortName.trim() } : {}),
+      ...(data.description !== undefined ? { description: data.description?.trim() || null } : {}),
+      ...(data.color ? { color: data.color } : {}),
+      ...(data.icon ? { icon: data.icon } : {}),
+      ...(data.practiceNote !== undefined ? { practiceNote: data.practiceNote.trim() } : {}),
+      ...(data.contestFormat !== undefined ? { contestFormat: data.contestFormat.trim() } : {}),
+      ...(data.pairBased !== undefined ? { pairBased: data.pairBased } : {}),
+      ...(data.teamSize !== undefined ? { teamSize: data.teamSize } : {}),
+    },
+  })
+}
+
+export async function deleteDomainAction(id: string) {
+  await requireRole('admin')
+  return db.domain.delete({
+    where: { id },
+  })
+}
+
+// -----------------------------------------------------------------------------
+// Seasons CRUD & Rollovers (scalability and multi-season next year support)
+// -----------------------------------------------------------------------------
+
+export async function listSeasonsAction() {
+  await requireRole('admin', 'instructor')
+  return db.season.findMany({
+    include: { phases: true },
+    orderBy: { createdAt: 'desc' },
+  })
+}
+
+export async function createSeasonAction(data: {
+  name: string
+  startDate: string
+  endDate: string
+  status?: string
+  phases?: Array<{
+    key: string
+    label: string
+    shortLabel: string
+    description: string
+    isMockHeavy?: boolean
+    sequence: number
+  }>
+}) {
+  await requireRole('admin')
+
+  // If status is active, deactivate other seasons first
+  if (data.status === 'active') {
+    await db.season.updateMany({
+      where: { status: 'active' },
+      data: { status: 'inactive' },
+    })
+  }
+
+  const season = await db.season.create({
+    data: {
+      name: data.name.trim(),
+      startDate: new Date(data.startDate),
+      endDate: new Date(data.endDate),
+      status: data.status || 'inactive',
+    },
+  })
+
+  // Create timeline phases if provided
+  if (data.phases && data.phases.length > 0) {
+    for (const p of data.phases) {
+      await db.seasonPhase.create({
+        data: {
+          seasonId: season.id,
+          key: p.key,
+          label: p.label,
+          shortLabel: p.shortLabel,
+          description: p.description,
+          isMockHeavy: p.isMockHeavy ?? false,
+          sequence: p.sequence,
+        },
+      })
+    }
+  }
+
+  revalidatePath('/')
+  return season
+}
+
+export async function updateSeasonAction(
+  id: string,
+  data: {
+    name?: string
+    startDate?: string
+    endDate?: string
+    status?: string
+    phases?: Array<{
+      id?: string
+      key: string
+      label: string
+      shortLabel: string
+      description: string
+      isMockHeavy?: boolean
+      sequence: number
+    }>
+  }
+) {
+  await requireRole('admin')
+
+  // If status is updated to active, deactivate other seasons
+  if (data.status === 'active') {
+    await db.season.updateMany({
+      where: { status: 'active', NOT: { id } },
+      data: { status: 'inactive' },
+    })
+  }
+
+  const season = await db.season.update({
+    where: { id },
+    data: {
+      ...(data.name ? { name: data.name.trim() } : {}),
+      ...(data.startDate ? { startDate: new Date(data.startDate) } : {}),
+      ...(data.endDate ? { endDate: new Date(data.endDate) } : {}),
+      ...(data.status ? { status: data.status } : {}),
+    },
+  })
+
+  // If phases are provided, replace/update them
+  if (data.phases) {
+    // Delete existing phases for this season first, then recreate
+    await db.seasonPhase.deleteMany({
+      where: { seasonId: id },
+    })
+    for (const p of data.phases) {
+      await db.seasonPhase.create({
+        data: {
+          seasonId: id,
+          key: p.key,
+          label: p.label,
+          shortLabel: p.shortLabel,
+          description: p.description,
+          isMockHeavy: p.isMockHeavy ?? false,
+          sequence: p.sequence,
+        },
+      })
+    }
+  }
+
+  revalidatePath('/')
+  return season
+}
+
+export async function deleteSeasonAction(id: string) {
+  await requireRole('admin')
+  const season = await db.season.delete({
+    where: { id },
+  })
+  revalidatePath('/')
+  return season
+}
+

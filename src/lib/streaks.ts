@@ -19,49 +19,10 @@
 // All computation is done in a single utility so client and server agree.
 
 import { db } from './db'
+import { manilaWeekKey, manilaWeekStartMs } from './timezone'
 
-const MANILA_TZ = 'Asia/Manila'
+export { manilaWeekKey, manilaWeekStartMs }
 
-function toManilaMs(ms: number): number {
-  // Manila is UTC+8 year-round (no DST). Rather than depend on Intl for the
-  // arithmetic, shift manually — this is what the SQL view would do too.
-  // We do still need the wall-clock fields in Manila, which Intl gives us.
-  return ms
-}
-
-function manilaWeekStartMs(ms: number): number {
-  // Get Manila wall-clock for this instant, find the Monday 00:00 of that week.
-  const formatter = new Intl.DateTimeFormat('en-US', {
-    timeZone: MANILA_TZ,
-    year: 'numeric', month: '2-digit', day: '2-digit',
-    weekday: 'short', hour: '2-digit', minute: '2-digit', second: '2-digit',
-    hour12: false,
-  })
-  const parts = formatter.formatToParts(new Date(ms))
-  const get = (t: string) => parts.find(p => p.type === t)?.value ?? ''
-  // JS Date months are 0-indexed
-  const year = Number(get('year'))
-  const month = Number(get('month')) - 1
-  const day = Number(get('day'))
-  // Compute weekday: Mon=1..Sun=7
-  const d = new Date(Date.UTC(year, month, day))
-  const weekday = d.getUTCDay() === 0 ? 7 : d.getUTCDay()
-  const mondayUtcMs = Date.UTC(year, month, day - (weekday - 1), 0, 0, 0)
-  // mondayUtcMs is Monday 00:00 Manila expressed as a UTC timestamp.
-  // Convert to ms since epoch: that's already what Date.UTC returns.
-  void toManilaMs
-  return mondayUtcMs
-}
-
-export function manilaWeekKey(ms: number): string {
-  const start = manilaWeekStartMs(ms)
-  const d = new Date(start)
-  // YYYY-MM-DD of the Monday
-  const y = d.getUTCFullYear()
-  const m = String(d.getUTCMonth() + 1).padStart(2, '0')
-  const day = String(d.getUTCDate()).padStart(2, '0')
-  return `${y}-${m}-${day}`
-}
 
 export function manilaWeekStart(ms: number): Date {
   return new Date(manilaWeekStartMs(ms))
@@ -91,14 +52,15 @@ export function lastNWeekStarts(n: number): Date[] {
 // week" as "status='active' and createdAt <= end of week". Archived ones that
 // were active during the week still count, because students could have been
 // working against them.
-export async function getActiveWeekKeysForDomain(domainId: string, weeks: Date[]): Promise<Set<string>> {
+export async function getActiveWeekKeysForDomain(domainId: string, seasonId: string, weeks: Date[]): Promise<Set<string>> {
   if (weeks.length === 0) return new Set()
-  // Pull all active/archived milestones for this domain — we need their createdAt
+  // Pull all active/archived milestones for this domain and season — we need their createdAt
   // to figure out which weeks they were active during. Don't over-filter at the
   // query level; the per-week check below does the real work.
   const milestones = await db.milestone.findMany({
     where: {
       domainId,
+      seasonId,
       status: { in: ['active', 'archived'] },
     },
     select: { createdAt: true, status: true, updatedAt: true },
@@ -121,15 +83,15 @@ export async function getActiveWeekKeysForDomain(domainId: string, weeks: Date[]
 // Returns the count of consecutive weeks (ending at current week) where the
 // user submitted at least once to this domain, skipping weeks where the
 // domain had no active milestones.
-export async function computeStreakForUserDomain(userId: string, domainId: string): Promise<number> {
+export async function computeStreakForUserDomain(userId: string, domainId: string, seasonId: string): Promise<number> {
   const weeks = lastNWeekStarts(52)
-  const activeWeekKeys = await getActiveWeekKeysForDomain(domainId, weeks)
+  const activeWeekKeys = await getActiveWeekKeysForDomain(domainId, seasonId, weeks)
 
-  // Get all submission timestamps for this user+domain in the past year
+  // Get all submission timestamps for this user+domain in the past year for this season
   const submissions = await db.submission.findMany({
     where: {
       userId,
-      milestone: { domainId },
+      milestone: { domainId, seasonId },
       clientSubmissionTimestamp: { gte: weeks[weeks.length - 1] },
     },
     select: { clientSubmissionTimestamp: true },
@@ -169,11 +131,11 @@ export async function computeStreakForUserDomain(userId: string, domainId: strin
 // Total streak = max streak across all domains the user participates in.
 // (A student practicing multiple domains can have one streak going even if a
 // single domain goes dark for a week.)
-export async function computeOverallStreak(userId: string): Promise<number> {
+export async function computeOverallStreak(userId: string, seasonId: string): Promise<number> {
   const domains = await db.domain.findMany({ select: { id: true } })
   let max = 0
   for (const d of domains) {
-    const s = await computeStreakForUserDomain(userId, d.id)
+    const s = await computeStreakForUserDomain(userId, d.id, seasonId)
     if (s > max) max = s
   }
   return max
@@ -183,21 +145,23 @@ export type StreakBreakdown = {
   domainId: string
   domainKey: string
   domainName: string
+  domainColor: string
+  domainIcon: string
   streak: number
   thisWeekSubmitted: boolean
 }
 
-export async function computeStreakBreakdown(userId: string): Promise<StreakBreakdown[]> {
+export async function computeStreakBreakdown(userId: string, seasonId: string): Promise<StreakBreakdown[]> {
   const domains = await db.domain.findMany()
   const thisWeekStart = currentManilaWeekStart()
   const thisWeekEnd = new Date(thisWeekStart.getTime() + 7 * 24 * 60 * 60 * 1000)
   const out: StreakBreakdown[] = []
   for (const d of domains) {
-    const streak = await computeStreakForUserDomain(userId, d.id)
+    const streak = await computeStreakForUserDomain(userId, d.id, seasonId)
     const thisWeekSubmission = await db.submission.findFirst({
       where: {
         userId,
-        milestone: { domainId: d.id },
+        milestone: { domainId: d.id, seasonId },
         clientSubmissionTimestamp: { gte: thisWeekStart, lt: thisWeekEnd },
       },
       select: { id: true },
@@ -206,6 +170,8 @@ export async function computeStreakBreakdown(userId: string): Promise<StreakBrea
       domainId: d.id,
       domainKey: d.key,
       domainName: d.name,
+      domainColor: d.color,
+      domainIcon: d.icon,
       streak,
       thisWeekSubmitted: !!thisWeekSubmission,
     })

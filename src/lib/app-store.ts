@@ -1,6 +1,7 @@
 'use client'
 
 import { create } from 'zustand'
+import type { Domain, SeasonPhase } from '@prisma/client'
 
 export type ViewKey =
   | 'dashboard'
@@ -11,6 +12,9 @@ export type ViewKey =
   | 'leading'
   | 'admin-users'
   | 'admin-milestones'
+  | 'admin-domains'
+  | 'admin-prompts'
+  | 'admin-seasons'
   | 'profile'
   | 'help'
 
@@ -31,12 +35,22 @@ type AppState = {
   setProctoredDomain: (d: string | null) => void
   setTeamDomain: (d: string | null) => void
 
+  // Global season and domain metadata cache
+  domains: Domain[]
+  phases: SeasonPhase[]
+  activeSeasonId: string | null
+  setDomains: (domains: Domain[]) => void
+  setPhases: (phases: SeasonPhase[]) => void
+  setActiveSeasonId: (id: string | null) => void
+  getDomainByKey: (key: string) => Domain | undefined
+  getPhaseByKey: (key: string) => SeasonPhase | undefined
+
   // Bump on every action that mutates data, so views can refetch
   refreshTick: number
   bump: () => void
 }
 
-export const useApp = create<AppState>((set) => ({
+export const useApp = create<AppState>((set, get) => ({
   view: 'dashboard',
   setView: (v) => set({ view: v }),
 
@@ -50,6 +64,15 @@ export const useApp = create<AppState>((set) => ({
   teamDomain: null,
   setProctoredDomain: (d) => set({ proctoredDomain: d }),
   setTeamDomain: (d) => set({ teamDomain: d }),
+
+  domains: [],
+  phases: [],
+  activeSeasonId: null,
+  setDomains: (domains) => set({ domains }),
+  setPhases: (phases) => set({ phases }),
+  setActiveSeasonId: (id) => set({ activeSeasonId: id }),
+  getDomainByKey: (key) => get().domains.find((d) => d.key === key),
+  getPhaseByKey: (key) => get().phases.find((p) => p.key === key),
 
   refreshTick: 0,
   bump: () => set((s) => ({ refreshTick: s.refreshTick + 1 })),

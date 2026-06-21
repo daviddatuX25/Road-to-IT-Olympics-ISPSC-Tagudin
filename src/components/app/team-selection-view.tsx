@@ -23,26 +23,36 @@ import {
 } from '@/components/ui/alert-dialog'
 import { toast } from 'sonner'
 import { getAvatar } from '@/lib/avatars'
-import { DOMAINS, domainMeta } from '@/lib/domains'
+import { getDomainIcon, domainMeta } from '@/lib/domains'
 import type { SessionUser } from '@/lib/auth'
 import { cn } from '@/lib/utils'
+import { useApp } from '@/lib/app-store'
 
 export function TeamSelectionView({ user }: { user: SessionUser }) {
-  const [selections, setSelections] = useState<Awaited<ReturnType<typeof listTeamSelectionsAction>> | null>(null)
-  const [activeDomain, setActiveDomain] = useState<string>(DOMAINS[0].key)
+  const { domains } = useApp()
+  const [selections, setSelections] = useState<Awaited<ReturnType<typeof api.listTeamSelectionsAction>> | null>(null)
+  const [activeDomain, setActiveDomain] = useState<string>('')
   const [open, setOpen] = useState(false)
-  const [users, setUsers] = useState<Awaited<ReturnType<typeof listUsersAction>> | null>(null)
+  const [users, setUsers] = useState<Awaited<ReturnType<typeof api.listUsersAction>> | null>(null)
 
   async function load() {
     const [sels, us] = await Promise.all([
       api.listTeamSelectionsAction(),
-      api.listUsersAction().catch(() => [])
+      api.listUsersAction().catch(() => []),
     ])
     setSelections(sels)
     setUsers(us)
   }
 
-  useEffect(() => { void load() }, [])
+  useEffect(() => {
+    void load()
+  }, [])
+
+  useEffect(() => {
+    if (domains.length > 0 && !activeDomain) {
+      setActiveDomain(domains[0].key)
+    }
+  }, [domains, activeDomain])
 
   if (!selections) return <div className="flex justify-center py-12"><Loader2 className="size-6 animate-spin text-muted-foreground" /></div>
 
@@ -76,21 +86,24 @@ export function TeamSelectionView({ user }: { user: SessionUser }) {
 
       <Tabs value={activeDomain} onValueChange={setActiveDomain}>
         <TabsList className="w-full justify-start overflow-x-auto flex-wrap h-auto">
-          {DOMAINS.map(d => (
-            <TabsTrigger key={d.key} value={d.key} className="gap-1.5">
-              <d.icon className="size-3.5" /> {d.shortName}
-            </TabsTrigger>
-          ))}
+          {domains.map(d => {
+            const Icon = getDomainIcon(d.icon)
+            return (
+              <TabsTrigger key={d.key} value={d.key} className="gap-1.5">
+                <Icon className="size-3.5" /> {d.shortName || d.key}
+              </TabsTrigger>
+            )
+          })}
         </TabsList>
 
-        {DOMAINS.map(d => {
+        {domains.map(d => {
           const domSelections = selections.filter(s => s.domain.key === d.key)
           return (
             <TabsContent key={d.key} value={d.key} className="space-y-3">
               <DomainTeamCard
                 domainKey={d.key}
                 domainName={d.name}
-                pairBased={d.pairBased}
+                teamSize={d.teamSize || (d.pairBased ? 2 : 1)}
                 selections={domSelections}
                 isStaff={isStaff || isCaptainOfDomain(d.key)}
                 currentUserId={user.id}
@@ -115,16 +128,17 @@ export function TeamSelectionView({ user }: { user: SessionUser }) {
         onOpenChange={setOpen}
         domainKey={activeDomain}
         onSaved={() => { setOpen(false); void load() }}
+        domains={domains}
       />
     </div>
   )
 }
 
-function DomainTeamCard({ domainKey, domainName, pairBased, selections, isStaff, currentUserId, onRemoved, onOpen }: {
+function DomainTeamCard({ domainKey, domainName, teamSize, selections, isStaff, currentUserId, onRemoved, onOpen }: {
   domainKey: string
   domainName: string
-  pairBased: boolean
-  selections: Awaited<ReturnType<typeof listTeamSelectionsAction>>
+  teamSize: number
+  selections: Awaited<ReturnType<typeof api.listTeamSelectionsAction>>
   isStaff: boolean
   currentUserId: string
   onRemoved: (domainId: string, userId: string) => void
@@ -133,7 +147,7 @@ function DomainTeamCard({ domainKey, domainName, pairBased, selections, isStaff,
   const meta = domainMeta(domainKey)
   const Icon = meta.icon
   const slotsFilled = selections.length
-  const slotsNeeded = pairBased ? 2 : 1
+  const slotsNeeded = teamSize
   const [pendingRemove, setPendingRemove] = useState<typeof selections[number] | null>(null)
 
   return (
@@ -147,7 +161,7 @@ function DomainTeamCard({ domainKey, domainName, pairBased, selections, isStaff,
             <div>
               <CardTitle className="text-base">{domainName}</CardTitle>
               <CardDescription>
-                {pairBased ? 'Pair contest — 2 slots' : 'Solo contest — 1 slot'} · {meta.contestFormat}
+                {teamSize > 1 ? `Team size — ${teamSize} slots` : 'Solo contest — 1 slot'} · {meta.contestFormat}
               </CardDescription>
             </div>
           </div>
@@ -248,16 +262,12 @@ function DomainTeamCard({ domainKey, domainName, pairBased, selections, isStaff,
 }
 
 function MockContext({ domainKey }: { domainKey: string }) {
-  const [mocks, setMocks] = useState<Awaited<ReturnType<typeof listProctoredMocksAction>> | null>(null)
+  const [mocks, setMocks] = useState<Awaited<ReturnType<typeof api.listProctoredMocksAction>> | null>(null)
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[] | null>(null)
 
   useEffect(() => {
     void (async () => {
-      const domain = DOMAINS.find(d => d.key === domainKey)
-      // Find the domain ID by listing users' mocks and matching by key
       const all = await api.listProctoredMocksAction()
-      // We need the domain ID. We can fetch by listing all and filtering client-side by domain.key
-      // But listProctoredMocksAction returns mocks with .domain populated. So:
       const matching = all.filter(m => m.domain.key === domainKey)
       setMocks(matching)
       setLeaderboard(await api.getLeaderboardAction())
@@ -316,13 +326,14 @@ function MockContext({ domainKey }: { domainKey: string }) {
   )
 }
 
-function SelectMemberDialog({ open, onOpenChange, domainKey, onSaved }: {
+function SelectMemberDialog({ open, onOpenChange, domainKey, onSaved, domains }: {
   open: boolean
   onOpenChange: (v: boolean) => void
   domainKey: string
   onSaved: () => void
+  domains: Awaited<ReturnType<typeof api.listDomainsAction>>
 }) {
-  const [students, setStudents] = useState<Awaited<ReturnType<typeof listUsersAction>>>([])
+  const [students, setStudents] = useState<Awaited<ReturnType<typeof api.listUsersAction>>>([])
   const [domainId, setDomainId] = useState('')
   const [userId, setUserId] = useState('')
   const [rationale, setRationale] = useState('')
@@ -334,23 +345,14 @@ function SelectMemberDialog({ open, onOpenChange, domainKey, onSaved }: {
       try {
         const us = await api.listUsersAction()
         setStudents(us.filter(u => u.role === 'student'))
-        // Look up the domain ID from the leaderboard / domains action
-        // Actually we have DOMAINS metadata but not IDs — fetch from any list that returns domains
-        // listUsersAction returns captainOf which includes domains, so use that:
-        const captainWithDomain = us.flatMap(u => u.captainOf).find(c => c.domain.key === domainKey)
-        if (captainWithDomain) setDomainId(captainWithDomain.domainId)
-        else {
-          // fallback: list domains via the existing actions
-          const listDomainsAction = api.listDomainsAction
-          const domains = await listDomainsAction()
-          const d = domains.find(x => x.key === domainKey)
-          if (d) setDomainId(d.id)
-        }
+        const list = domains.length > 0 ? domains : await api.listDomainsAction()
+        const d = list.find(x => x.key === domainKey)
+        if (d) setDomainId(d.id)
       } catch {
         toast.error('Could not load students. You may not have permission.')
       }
     })()
-  }, [open, domainKey])
+  }, [open, domainKey, domains])
 
   function submit() {
     startTransition(async () => {
@@ -372,7 +374,7 @@ function SelectMemberDialog({ open, onOpenChange, domainKey, onSaved }: {
         <DialogHeader>
           <DialogTitle>Select a team member</DialogTitle>
           <DialogDescription>
-            For {DOMAINS.find(d => d.key === domainKey)?.name ?? domainKey}. This is the eligibility gate — your decision is final and auditable.
+            For {domains.find(d => d.key === domainKey)?.name ?? domainKey}. This is the eligibility gate — your decision is final and auditable.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-3">

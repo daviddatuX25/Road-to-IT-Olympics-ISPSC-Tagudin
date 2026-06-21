@@ -18,11 +18,11 @@ import {
 } from '@/components/ui/dialog'
 import { toast } from 'sonner'
 import { getAvatar, AVATARS } from '@/lib/avatars'
-import { DOMAINS, domainMeta } from '@/lib/domains'
+import { DOMAINS, domainMeta, getDomainIcon } from '@/lib/domains'
 
 export function UsersAdmin() {
-  const [users, setUsers] = useState<Awaited<ReturnType<typeof listUsersAction>> | null>(null)
-  const [domains, setDomains] = useState<Awaited<ReturnType<typeof listDomainsAction>> | null>(null)
+  const [users, setUsers] = useState<Awaited<ReturnType<typeof api.listUsersAction>> | null>(null)
+  const [domains, setDomains] = useState<Awaited<ReturnType<typeof api.listDomainsAction>> | null>(null)
   const [createOpen, setCreateOpen] = useState(false)
   const [captainOpen, setCaptainOpen] = useState<{ userId: string; nickname: string } | null>(null)
 
@@ -267,7 +267,7 @@ function CreateUserDialog({ open, onOpenChange, onSaved }: {
 function CaptainDialog({ userId, nickname, domains, existing, onOpenChange, onSaved }: {
   userId: string
   nickname: string
-  domains: Awaited<ReturnType<typeof listDomainsAction>>
+  domains: Awaited<ReturnType<typeof api.listDomainsAction>>
   existing: { domainId: string }[]
   onOpenChange: (v: boolean) => void
   onSaved: () => void
@@ -320,5 +320,5 @@ function CaptainDialog({ userId, nickname, domains, existing, onOpenChange, onSa
   )
 }
 
-void Shield
-void DOMAINS
+
+

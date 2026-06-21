@@ -2,7 +2,7 @@
 
 import { api } from '@/lib/api-client'
 import { MilestoneWithMeta } from '@/lib/api-client'
-import { useEffect, useState, useTransition, useMemo } from 'react'
+import { useEffect, useState, useTransition, useMemo, createElement } from 'react'
 import {
   Loader2, ArrowLeft, Copy, Check, Filter, Plus, Lock, Archive,
   FileText, Sparkles, ClipboardList, Code2, X, Save,
@@ -20,7 +20,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { toast } from 'sonner'
 import { useApp } from '@/lib/app-store'
 import { getAvatar } from '@/lib/avatars'
-import { DOMAINS, PHASES, MODES, DIFFICULTIES, domainMeta, modeMeta, difficultyMeta, phaseLabel } from '@/lib/domains'
+import { MODES, DIFFICULTIES, domainMeta, modeMeta, difficultyMeta, phaseLabel, getDomainIcon } from '@/lib/domains'
 import type { SessionUser } from '@/lib/auth'
 import { formatDistanceToNow } from 'date-fns'
 import { cn } from '@/lib/utils'
@@ -28,14 +28,18 @@ import { cn } from '@/lib/utils'
 export function MilestonesView({ user }: { user: SessionUser }) {
   const {
     milestoneFilterDomain, milestoneFilterWeek, selectedMilestoneId,
-    setMilestoneFilter, selectMilestone,
+    setMilestoneFilter, selectMilestone, domains, phases,
   } = useApp()
 
   const [milestones, setMilestones] = useState<MilestoneWithMeta[] | null>(null)
+  
   // Resolve domain keys → DB IDs so the filter actually matches server-side.
-  // (The milestone filter passes a domainId to the API, but the dropdown was
-  // using domain keys like 'java' as values, which never match a cuid.)
-  const [domainIdByKey, setDomainIdByKey] = useState<Record<string, string>>({})
+  const domainIdByKey = useMemo(() => {
+    const map: Record<string, string> = {}
+    for (const d of domains) map[d.key] = d.id
+    return map
+  }, [domains])
+
   // Normalize any incoming preset to an ID. If it's already a cuid, keep it;
   // otherwise map it through the key→id table.
   const resolveDomain = (val: string | null): string => {
@@ -43,35 +47,22 @@ export function MilestonesView({ user }: { user: SessionUser }) {
     if (domainIdByKey[val]) return domainIdByKey[val]
     return val
   }
-  const [domainFilter, setDomainFilter] = useState<string>(resolveDomain(milestoneFilterDomain) ?? 'all')
-  const [weekFilter, setWeekFilter] = useState<string>(milestoneFilterWeek ?? 'all')
+  
+  const [domainFilter, setDomainFilter] = useState<string>('all')
+  const [weekFilter, setWeekFilter] = useState<string>('all')
   const [modeFilter, setModeFilter] = useState<string>('all')
 
-  // Load the domain key→id map once on mount.
-  useEffect(() => {
-    void (async () => {
-      const domains = await api.listDomainsAction()
-      const map: Record<string, string> = {}
-      for (const d of domains) map[d.key] = d.id
-      setDomainIdByKey(map)
-      // If we were preset with a domain key (e.g. 'java' from the dashboard
-      // before the fix shipped), translate it to its ID now that we have the map.
-      if (milestoneFilterDomain && map[milestoneFilterDomain]) {
-        setDomainFilter(map[milestoneFilterDomain])
-      }
-    })()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  // Keep store in sync if user navigated from dashboard with a filter preset
+  // Set initial filters based on presets when map/lists load
   useEffect(() => {
     if (milestoneFilterDomain) {
       const resolved = resolveDomain(milestoneFilterDomain)
       if (resolved !== 'all') setDomainFilter(resolved)
     }
+  }, [milestoneFilterDomain, domainIdByKey])
+
+  useEffect(() => {
     if (milestoneFilterWeek) setWeekFilter(milestoneFilterWeek)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [milestoneFilterDomain, milestoneFilterWeek])
+  }, [milestoneFilterWeek])
 
   async function load() {
     const data = await api.listMilestoneMetaAction({
@@ -112,16 +103,11 @@ export function MilestonesView({ user }: { user: SessionUser }) {
             <FilterSelect label="Domain" value={domainFilter} onChange={setDomainFilter}
               options={[
                 { value: 'all', label: 'All domains' },
-                // Wait until the key→id map resolves so the option values are
-                // real domain IDs (not keys). Until then only "All domains"
-                // is selectable, which is fine — the list loads either way.
-                ...DOMAINS
-                  .filter(d => domainIdByKey[d.key])
-                  .map(d => ({ value: domainIdByKey[d.key], label: d.name })),
+                ...domains.map(d => ({ value: d.id, label: d.name })),
               ]}
             />
             <FilterSelect label="Phase / week" value={weekFilter} onChange={setWeekFilter}
-              options={[{ value: 'all', label: 'All phases' }, ...PHASES.map(p => ({ value: p.key, label: p.label }))]}
+              options={[{ value: 'all', label: 'All phases' }, ...phases.map(p => ({ value: p.key, label: p.label }))]}
             />
             <FilterSelect label="Mode" value={modeFilter} onChange={setModeFilter}
               options={[{ value: 'all', label: 'All modes' }, ...MODES.map(m => ({ value: m.key, label: m.label }))]}
@@ -167,17 +153,17 @@ function FilterSelect({ label, value, onChange, options }: {
 }
 
 function MilestoneRow({ milestone, onOpen }: { milestone: MilestoneWithMeta; onOpen: () => void }) {
-  const meta = domainMeta(milestone.domain.key)
-  const Icon = meta.icon
+  const color = milestone.domain.color || '#16a34a'
   const diff = difficultyMeta(milestone.difficulty)
   const mode = modeMeta(milestone.mode)
+  const icon = getDomainIcon(milestone.domain.icon)
 
   return (
     <button onClick={onOpen} className="text-left">
       <Card className="hover:shadow-md hover:border-primary/30 transition-all">
         <CardContent className="py-4 flex items-start gap-4">
-          <div className="size-10 rounded-lg grid place-items-center shrink-0" style={{ background: `${meta.color}20`, color: meta.color }}>
-            <Icon className="size-5" />
+          <div className="size-10 rounded-lg grid place-items-center shrink-0" style={{ background: `${color}20`, color }}>
+            {createElement(icon, { className: 'size-5' })}
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap mb-1">
@@ -212,7 +198,7 @@ function MilestoneRow({ milestone, onOpen }: { milestone: MilestoneWithMeta; onO
 // -----------------------------------------------------------------------------
 
 function MilestoneDetail({ id, user, onBack }: { id: string; user: SessionUser; onBack: () => void }) {
-  const [data, setData] = useState<Awaited<ReturnType<typeof getMilestoneAction>> | null | undefined>(undefined)
+  const [data, setData] = useState<Awaited<ReturnType<typeof api.getMilestoneAction>> | null | undefined>(undefined)
   const [copied, setCopied] = useState(false)
   const [showSubmit, setShowSubmit] = useState(false)
 
@@ -235,8 +221,8 @@ function MilestoneDetail({ id, user, onBack }: { id: string; user: SessionUser; 
     </Card>
   )
 
-  const meta = domainMeta(data.domain.key)
-  const Icon = meta.icon
+  const Icon = getDomainIcon(data.domain.icon)
+  const color = data.domain.color || '#16a34a'
   const diff = difficultyMeta(data.difficulty)
   const mode = modeMeta(data.mode)
   const accepted = JSON.parse(data.acceptedInputTypes) as string[]
@@ -263,12 +249,12 @@ function MilestoneDetail({ id, user, onBack }: { id: string; user: SessionUser; 
       <Card>
         <CardHeader>
           <div className="flex items-start gap-4">
-            <div className="size-11 rounded-lg grid place-items-center shrink-0" style={{ background: `${meta.color}20`, color: meta.color }}>
+            <div className="size-11 rounded-lg grid place-items-center shrink-0" style={{ background: `${color}20`, color }}>
               <Icon className="size-5" />
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap mb-1">
-                <Badge variant="outline" className="text-[10px]">{meta.name}</Badge>
+                <Badge variant="outline" className="text-[10px]">{data.domain.name}</Badge>
                 <Badge variant="outline" className="text-[10px] capitalize">{mode.label}</Badge>
                 <Badge variant="outline" className="text-[10px] capitalize" style={{ color: diff.color, borderColor: diff.color + '40' }}>{diff.label}</Badge>
                 <Badge variant="outline" className="text-[10px]">{phaseLabel(data.weekOrPhase)}</Badge>
@@ -280,7 +266,7 @@ function MilestoneDetail({ id, user, onBack }: { id: string; user: SessionUser; 
               </div>
               <CardTitle className="text-lg">{data.title}</CardTitle>
               <CardDescription className="mt-1">
-                Authored by {data.creator.nickname} · v{data.version} · {data._count?.submissions ?? data.submissions.length} submission{(data._count?.submissions ?? data.submissions.length) === 1 ? '' : 's'}
+                Authored by {data.creator.nickname} · v{data.version} · {data.submissions.length} submission{data.submissions.length === 1 ? '' : 's'}
               </CardDescription>
             </div>
           </div>

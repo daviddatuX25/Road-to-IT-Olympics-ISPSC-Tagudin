@@ -18,7 +18,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { toast } from 'sonner'
 import { getAvatar } from '@/lib/avatars'
-import { DOMAINS, domainMeta } from '@/lib/domains'
+import { DOMAINS, domainMeta, getDomainIcon } from '@/lib/domains'
 import type { SessionUser } from '@/lib/auth'
 import { formatDistanceToNow } from 'date-fns'
 import { cn } from '@/lib/utils'
@@ -50,11 +50,26 @@ type SuggestedPair = {
 }
 
 export function LeadingCandidates({ user }: { user: SessionUser }) {
+  const [dbDomains, setDbDomains] = useState<Awaited<ReturnType<typeof api.listDomainsAction>>>([])
   const [activeDomain, setActiveDomain] = useState<string>(DOMAINS[0].key)
   const [data, setData] = useState<{ evaluations: CandidateEvaluationMeta[]; candidates: Candidate[] } | null>(null)
   const [pairs, setPairs] = useState<SuggestedPair[] | null>(null)
   const [evalDialog, setEvalDialog] = useState<{ userId: string; pairPartnerId?: string | null } | null>(null)
   const [historyDialog, setHistoryDialog] = useState<{ userId: string } | null>(null)
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const domains = await api.listDomainsAction()
+        setDbDomains(domains)
+        if (domains.length > 0) {
+          setActiveDomain(domains[0].key)
+        }
+      } catch (err) {
+        console.error('Failed to load domains', err)
+      }
+    })()
+  }, [])
 
   async function load() {
     setData(null); setPairs(null)
@@ -99,15 +114,18 @@ export function LeadingCandidates({ user }: { user: SessionUser }) {
 
       <Tabs value={activeDomain} onValueChange={setActiveDomain}>
         <TabsList className="w-full justify-start overflow-x-auto flex-wrap h-auto">
-          {DOMAINS.map(d => (
-            <TabsTrigger key={d.key} value={d.key} className="gap-1.5">
-              <d.icon className="size-3.5" /> {d.shortName}
-              {d.pairBased && <Users className="size-3 text-muted-foreground" />}
-            </TabsTrigger>
-          ))}
+          {(dbDomains.length > 0 ? dbDomains : DOMAINS).map(d => {
+            const Icon = getDomainIcon(d.icon)
+            return (
+              <TabsTrigger key={d.key} value={d.key} className="gap-1.5">
+                <Icon className="size-3.5" /> {d.shortName || d.key}
+                {d.pairBased && <Users className="size-3 text-muted-foreground" />}
+              </TabsTrigger>
+            )
+          })}
         </TabsList>
 
-        {DOMAINS.map(d => (
+        {(dbDomains.length > 0 ? dbDomains : DOMAINS).map(d => (
           <TabsContent key={d.key} value={d.key}>
             {activeDomain === d.key && (
               <DomainCandidatesPanel

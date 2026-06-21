@@ -4,12 +4,14 @@ async function main() {
   // Mimic what createMilestoneAction does
   const admin = await db.user.findUnique({ where: { email: 'admin@ito.test' } })
   const dom = await db.domain.findFirst({ where: { key: 'java' } })
-  if (!admin || !dom) { console.log('missing'); return }
+  const season = await db.season.findFirst({ where: { status: 'active' } })
+  if (!admin || !dom || !season) { console.log('missing'); return }
   
   try {
     const milestone = await db.milestone.create({
       data: {
         domain: { connect: { id: dom.id } },
+        season: { connect: { id: season.id } },
         creator: { connect: { id: admin.id } },
         weekOrPhase: 'aug-w1',
         mode: 'tutor',

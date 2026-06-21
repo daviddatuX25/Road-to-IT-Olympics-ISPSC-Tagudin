@@ -9,15 +9,8 @@ import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { toast } from 'sonner'
 
-const QUICK_PICKS = [
-  { label: 'Admin (Capt. Mara)',          email: 'admin@ito.test',       role: 'Admin · full system config' },
-  { label: 'Instructor (Prof. Reyes)',     email: 'instructor@ito.test',  role: 'Author milestones, see all' },
-  { label: 'Student · lia.exe · Java Cpt', email: 'lia@ito.test',         role: 'Student + Java captain · 4-week streak' },
-  { label: 'Student · markbyte',           email: 'mark@ito.test',        role: 'Student · pair partner to lia' },
-  { label: 'Student · tashadb · DB Cpt',   email: 'tasha@ito.test',       role: 'Student + DB captain · 3-week streak' },
-  { label: 'Student · jico.bin · Quiz Cpt',email: 'jico@ito.test',        role: 'Student + Quiz captain' },
-  { label: 'Student · rico_byte',          email: 'rico@ito.test',        role: 'Student · lapsed (week 1 only)' },
-]
+// Quick sign-in is disabled. Use the seeded credentials to test the roles:
+// Admin: admin@ito.test | Instructor: instructor@ito.test | Student: lia@ito.test
 
 export function Login({ onLogin }: { onLogin: () => void }) {
   const [email, setEmail] = useState('lia@ito.test')
@@ -116,23 +109,10 @@ export function Login({ onLogin }: { onLogin: () => void }) {
               </Button>
             </form>
 
-            <div className="mt-6 pt-6 border-t">
-              <p className="text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wider">Quick sign-in</p>
-              <div className="space-y-1 max-h-72 overflow-y-auto pr-1 -mr-1">
-                {QUICK_PICKS.map((p) => (
-                  <button
-                    key={p.email}
-                    onClick={() => {
-                      setEmail(p.email)
-                      setPassword('olypmics2026')
-                    }}
-                    className="w-full text-left px-3 py-2 rounded-md hover:bg-accent transition-colors border border-transparent hover:border-border"
-                  >
-                    <div className="text-sm font-medium">{p.label}</div>
-                    <div className="text-xs text-muted-foreground">{p.role}</div>
-                  </button>
-                ))}
-              </div>
+            <div className="mt-6 pt-6 border-t text-center">
+              <p className="text-xs text-muted-foreground">
+                Enter your registered credentials to sign in.
+              </p>
             </div>
           </CardContent>
         </Card>

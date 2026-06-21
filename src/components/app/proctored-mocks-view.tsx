@@ -20,20 +20,33 @@ import {
 import { toast } from 'sonner'
 import { useApp } from '@/lib/app-store'
 import { getAvatar } from '@/lib/avatars'
-import { DOMAINS, domainMeta } from '@/lib/domains'
+import { DOMAINS, domainMeta, getDomainIcon } from '@/lib/domains'
 import type { SessionUser } from '@/lib/auth'
 
 export function ProcturedMocksView({ user }: { user: SessionUser }) {
   const { proctoredDomain } = useApp()
-  const [mocks, setMocks] = useState<Awaited<ReturnType<typeof listProctoredMocksAction>> | null>(null)
+  const [mocks, setMocks] = useState<Awaited<ReturnType<typeof api.listProctoredMocksAction>> | null>(null)
   const [domainFilter, setDomainFilter] = useState<string>(proctoredDomain ?? 'all')
   const [open, setOpen] = useState(false)
 
+  const [dbDomains, setDbDomains] = useState<Awaited<ReturnType<typeof api.listDomainsAction>>>([])
+  const [domainIdByKey, setDomainIdByKey] = useState<Record<string, string>>({})
+
   async function load() {
-    const data = await api.listProctoredMocksAction({
-      domainId: domainFilter === 'all' ? undefined : domainFilter,
-    })
+    const [data, doms] = await Promise.all([
+      api.listProctoredMocksAction({
+        domainId: domainFilter === 'all' ? undefined : domainFilter,
+      }),
+      api.listDomainsAction(),
+    ])
     setMocks(data)
+    setDbDomains(doms)
+    const map: Record<string, string> = {}
+    for (const d of doms) map[d.key] = d.id
+    setDomainIdByKey(map)
+    if (proctoredDomain && map[proctoredDomain]) {
+      setDomainFilter(map[proctoredDomain])
+    }
   }
 
   useEffect(() => {
@@ -86,7 +99,10 @@ export function ProcturedMocksView({ user }: { user: SessionUser }) {
               <SelectTrigger className="w-full sm:w-64"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All domains</SelectItem>
-                {DOMAINS.map(d => <SelectItem key={d.key} value={d.key}>{d.name}</SelectItem>)}
+                {(dbDomains.length > 0 ? dbDomains : DOMAINS).map(d => {
+                  const id = domainIdByKey[d.key] || d.id
+                  return <SelectItem key={id} value={id}>{d.name}</SelectItem>
+                })}
               </SelectContent>
             </Select>
           </div>
@@ -112,13 +128,13 @@ export function ProcturedMocksView({ user }: { user: SessionUser }) {
                 </TableHeader>
                 <TableBody>
                   {mocks.map((m) => {
-                    const meta = domainMeta(m.domain.key)
-                    const Icon = meta.icon
+                    const Icon = getDomainIcon(m.domain.icon)
+                    const color = m.domain.color || '#16a34a'
                     const avatar = getAvatar(m.user.avatarId)
                     return (
                       <TableRow key={m.id}>
                         <TableCell>
-                          <div className="size-8 rounded-md grid place-items-center" style={{ background: `${meta.color}20`, color: meta.color }}>
+                          <div className="size-8 rounded-md grid place-items-center" style={{ background: `${color}20`, color }}>
                             <Icon className="size-4" />
                           </div>
                         </TableCell>
@@ -169,7 +185,7 @@ function EntryDialog({ open, onOpenChange, onSaved }: {
   onOpenChange: (v: boolean) => void
   onSaved: () => void
 }) {
-  const [students, setStudents] = useState<Awaited<ReturnType<typeof listUsersAction>>>([])
+  const [students, setStudents] = useState<Awaited<ReturnType<typeof api.listUsersAction>>>([])
   const [domainId, setDomainId] = useState('')
   const [domains, setDomains] = useState<{ id: string; key: string; name: string }[]>([])
   const [userId, setUserId] = useState('')
@@ -236,7 +252,7 @@ function EntryDialog({ open, onOpenChange, onSaved }: {
               <Select value={domainId} onValueChange={setDomainId}>
                 <SelectTrigger><SelectValue placeholder="Pick a domain" /></SelectTrigger>
                 <SelectContent>
-                  {domains.map(d => <SelectItem key={d.id} value={d.id}>{DOMAINS.find(m => m.key === d.key)?.name ?? d.name}</SelectItem>)}
+                  {domains.map(d => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>

@@ -20,20 +20,20 @@ import {
 } from '@/components/ui/table'
 import { toast } from 'sonner'
 import { useApp } from '@/lib/app-store'
-import { DOMAINS, PHASES, MODES, DIFFICULTIES, domainMeta, modeMeta, difficultyMeta, phaseLabel } from '@/lib/domains'
+import { MODES, DIFFICULTIES, domainMeta, modeMeta, difficultyMeta, phaseLabel, getDomainIcon } from '@/lib/domains'
 import type { SessionUser } from '@/lib/auth'
 import { cn } from '@/lib/utils'
 
 export function AdminMilestones({ user }: { user: SessionUser }) {
-  const { selectMilestone } = useApp()
+  const { selectMilestone, domains } = useApp()
   const [milestones, setMilestones] = useState<MilestoneWithMeta[] | null>(null)
   const [editorOpen, setEditorOpen] = useState<null | { mode: 'create' } | { mode: 'version'; milestone: MilestoneWithMeta } | { mode: 'edit'; milestone: MilestoneWithMeta }>(null)
   const [versionView, setVersionView] = useState<MilestoneWithMeta | null>(null)
 
   async function load() {
     // Show all milestones (draft + active + archived) for staff/captains
-    const data = await api.listMilestoneMetaAction()
-    setMilestones(data)
+    const milestonesData = await api.listMilestoneMetaAction()
+    setMilestones(milestonesData)
   }
 
   useEffect(() => { void load() }, [])
@@ -135,6 +135,7 @@ export function AdminMilestones({ user }: { user: SessionUser }) {
       {editorOpen && (
         <MilestoneEditor
           mode={editorOpen.mode}
+          milestone={'milestone' in editorOpen ? editorOpen.milestone : undefined}
           onClose={() => setEditorOpen(null)}
           onSaved={() => { setEditorOpen(null); void load() }}
         />
@@ -149,7 +150,7 @@ function VersionDetail({ milestone, onBack, onEdit }: {
   onEdit: () => void
 }) {
   const [, startTransition] = useTransition()
-  const [detail, setDetail] = useState<Awaited<ReturnType<typeof getMilestoneAction>> | null>(null)
+  const [detail, setDetail] = useState<Awaited<ReturnType<typeof api.getMilestoneAction>> | null>(null)
   const { selectMilestone, setView } = useApp()
 
   useEffect(() => {
@@ -261,19 +262,46 @@ function VersionDetail({ milestone, onBack, onEdit }: {
   )
 }
 
-function MilestoneEditor({ mode, onClose, onSaved }: {
+function MilestoneEditor({ mode, milestone, onClose, onSaved }: {
   mode: 'create' | 'version' | 'edit'
+  milestone?: MilestoneWithMeta
   onClose: () => void
   onSaved: () => void
 }) {
+  const { domains, phases } = useApp()
   // Seed fields from existing milestone when versioning/editing
-  const initial = mode === 'create' ? null : mode.milestone
-  const [domainKey, setDomainKey] = useState(initial?.domain.key ?? DOMAINS[0].key)
-  const [weekOrPhase, setWeekOrPhase] = useState(initial?.weekOrPhase ?? PHASES[2].key)
+  const initial = milestone
+  const [domainKey, setDomainKey] = useState(initial?.domain.key ?? domains?.[0]?.key ?? '')
+  const [weekOrPhase, setWeekOrPhase] = useState(initial?.weekOrPhase ?? phases?.[2]?.key ?? phases?.[0]?.key ?? '')
   const [modeVal, setModeVal] = useState<'tutor' | 'assessment' | 'journal'>(initial?.mode as 'tutor' | 'assessment' | 'journal' ?? 'tutor')
   const [difficulty, setDifficulty] = useState<'easy' | 'average' | 'difficult'>(initial?.difficulty as 'easy' | 'average' | 'difficult' ?? 'easy')
   const [title, setTitle] = useState(initial?.title ?? '')
   const [prompt, setPrompt] = useState(initial?.promptTemplate ?? '')
+  const [templates, setTemplates] = useState<Awaited<ReturnType<typeof api.listSystemPromptTemplatesAction>>>([])
+
+  useEffect(() => {
+    if (!domainKey && domains.length > 0) {
+      setDomainKey(domains[0].key)
+    }
+  }, [domains, domainKey])
+
+  useEffect(() => {
+    if (!weekOrPhase && phases.length > 0) {
+      setWeekOrPhase(phases[2]?.key ?? phases[0]?.key)
+    }
+  }, [phases, weekOrPhase])
+
+  useEffect(() => {
+    async function loadTemplates() {
+      try {
+        const data = await api.listSystemPromptTemplatesAction()
+        setTemplates(data)
+      } catch (err) {
+        console.error('Failed to load system prompt templates', err)
+      }
+    }
+    void loadTemplates()
+  }, [])
   const [accepted, setAccepted] = useState<string[]>(() => {
     if (!initial) return ['guided_form']
     try { return JSON.parse(initial.acceptedInputTypes) as string[] } catch { return ['guided_form'] }
@@ -367,7 +395,7 @@ function MilestoneEditor({ mode, onClose, onSaved }: {
               <Select value={domainKey} onValueChange={setDomainKey} disabled={mode !== 'create'}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {DOMAINS.map(d => <SelectItem key={d.key} value={d.key}>{d.name}</SelectItem>)}
+                  {domains.map(d => <SelectItem key={d.key} value={d.key}>{d.name}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
@@ -376,7 +404,7 @@ function MilestoneEditor({ mode, onClose, onSaved }: {
               <Select value={weekOrPhase} onValueChange={setWeekOrPhase}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {PHASES.map(p => <SelectItem key={p.key} value={p.key}>{p.label}</SelectItem>)}
+                  {phases.map(p => <SelectItem key={p.key} value={p.key}>{p.label}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
@@ -420,6 +448,28 @@ function MilestoneEditor({ mode, onClose, onSaved }: {
 
           <div className="space-y-1.5">
             <Label htmlFor="prompt">Prompt template</Label>
+            {templates.length > 0 && (
+              <div className="mb-2">
+                <Select
+                  onValueChange={(val) => {
+                    const selected = templates.find(t => t.id === val)
+                    if (selected) {
+                      setPrompt(selected.template)
+                      toast.success(`Loaded preset: ${selected.name}`)
+                    }
+                  }}
+                >
+                  <SelectTrigger className="w-full bg-background">
+                    <SelectValue placeholder="Load preset prompt template..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {templates.map(t => (
+                      <SelectItem key={t.id} value={t.id}>{t.name} ({t.mode})</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             <Textarea
               id="prompt" value={prompt} onChange={(e) => setPrompt(e.target.value)} rows={14}
               className="font-mono text-xs"

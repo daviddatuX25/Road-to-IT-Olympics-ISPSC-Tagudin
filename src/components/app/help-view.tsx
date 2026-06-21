@@ -22,8 +22,9 @@ import {
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { useApp, type ViewKey } from '@/lib/app-store'
-import { DOMAINS, MODES } from '@/lib/domains'
+import { DOMAINS, MODES, getDomainIcon } from '@/lib/domains'
 import { cn } from '@/lib/utils'
+import { api } from '@/lib/api-client'
 
 type SectionKey =
   | 'overview' | 'practice-loop' | 'milestones' | 'modes' | 'wall'
@@ -47,6 +48,19 @@ const SECTIONS: Array<{ key: SectionKey; label: string; icon: typeof HelpCircle 
 
 export function HelpView() {
   const [active, setActive] = useState<SectionKey>('overview')
+  const [domains, setDomains] = useState<Awaited<ReturnType<typeof api.listDomainsAction>>>([])
+
+  useEffect(() => {
+    async function loadDomains() {
+      try {
+        const data = await api.listDomainsAction()
+        setDomains(data)
+      } catch (err) {
+        console.error('Failed to load domains', err)
+      }
+    }
+    void loadDomains()
+  }, [])
 
   // Scroll to top whenever the section changes — long-form content otherwise
   // keeps the user's previous scroll position, which is disorienting.
@@ -112,7 +126,7 @@ export function HelpView() {
           {active === 'leaderboard'   && <LeaderboardSection />}
           {active === 'leading'       && <LeadingSection />}
           {active === 'roles'         && <RolesSection />}
-          {active === 'calendar'      && <CalendarSection />}
+          {active === 'calendar'      && <CalendarSection domains={domains} />}
           {active === 'faq'           && <FaqSection />}
         </div>
       </div>
@@ -633,7 +647,7 @@ function RoleRow({ icon: Icon, color, name, can }: { icon: typeof Crown; color: 
   )
 }
 
-function CalendarSection() {
+function CalendarSection({ domains }: { domains: Awaited<ReturnType<typeof api.listDomainsAction>> }) {
   return (
     <Card>
       <CardHeader>
@@ -668,8 +682,8 @@ function CalendarSection() {
 
         <H>The six domains</H>
         <div className="grid sm:grid-cols-2 gap-2">
-          {DOMAINS.map(d => {
-            const Icon = DOMAIN_ICONS[d.key] ?? Code2
+          {(domains.length > 0 ? domains : DOMAINS).map(d => {
+            const Icon = getDomainIcon(d.icon)
             return (
               <div key={d.key} className="flex items-start gap-2 p-3 rounded-md border">
                 <div className="size-8 rounded-md grid place-items-center shrink-0" style={{ background: `${d.color}20`, color: d.color }}>

@@ -23,7 +23,7 @@ export function ProfileSettings({ user }: { user: SessionUser }) {
   const [nickname, setNickname] = useState(user.nickname)
   const [avatarId, setAvatarId] = useState(user.avatarId)
   const [pending, startTransition] = useTransition()
-  const [breakdown, setBreakdown] = useState<Awaited<ReturnType<typeof getStreakBreakdownAction>> | null>(null)
+  const [breakdown, setBreakdown] = useState<Awaited<ReturnType<typeof api.getStreakBreakdownAction>> | null>(null)
 
   useEffect(() => {
     void (async () => { setBreakdown(await api.getStreakBreakdownAction()) })()

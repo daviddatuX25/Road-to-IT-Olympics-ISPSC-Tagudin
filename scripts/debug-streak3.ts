@@ -13,8 +13,11 @@ async function main() {
   for (const s of subs) {
     console.log('  at:', s.clientSubmissionTimestamp, 'key:', manilaWeekKey(s.clientSubmissionTimestamp.getTime()))
   }
+  const activeSeason = await db.season.findFirst({ where: { status: 'active' } })
+  if (!activeSeason) { console.log('no active season'); return }
+
   const weeks = lastNWeekStarts(8)
-  const activeKeys = await getActiveWeekKeysForDomain(java.id, weeks)
+  const activeKeys = await getActiveWeekKeysForDomain(java.id, activeSeason.id, weeks)
   console.log('active week keys (last 8):', Array.from(activeKeys).slice(0, 8))
 }
 main().then(() => db.$disconnect()).catch(e => { console.error(e); db.$disconnect() })

@@ -58,6 +58,16 @@ const ALLOWED: ReadonlySet<string> = new Set([
   'getStudentDashboardDataAction',
   'getInstructorDashboardDataAction',
   'getAdminDashboardDataAction',
+  'listSystemPromptTemplatesAction',
+  'updateSystemPromptTemplateAction',
+  'createDomainAction',
+  'updateDomainAction',
+  'deleteDomainAction',
+  'getActiveSeasonAction',
+  'listSeasonsAction',
+  'createSeasonAction',
+  'updateSeasonAction',
+  'deleteSeasonAction',
 ])
 
 // Simple in-memory rate limiter — per IP, per action.

@@ -19,7 +19,7 @@ import {
 import { toast } from 'sonner'
 import { getAvatar } from '@/lib/avatars'
 import { useApp } from '@/lib/app-store'
-import { DOMAINS, domainMeta } from '@/lib/domains'
+import { getDomainIcon } from '@/lib/domains'
 import type { SessionUser } from '@/lib/auth'
 import { cn } from '@/lib/utils'
 
@@ -212,13 +212,18 @@ function StreakLeaderboard({ currentUser }: { currentUser: SessionUser }) {
 // -----------------------------------------------------------------------------
 
 function AssessmentLeaderboard({ currentUser }: { currentUser: SessionUser }) {
+  const { domains } = useApp()
   const [leaders, setLeaders] = useState<AssessmentLeader[] | null>(null)
   const [domainFilter, setDomainFilter] = useState<string>('all')
 
   useEffect(() => {
     void (async () => {
-      const data = await api.getAssessmentLeadersAction()
-      setLeaders(data)
+      try {
+        const data = await api.getAssessmentLeadersAction()
+        setLeaders(data)
+      } catch (err) {
+        console.error('Failed to load leaders', err)
+      }
     })()
   }, [])
 
@@ -258,7 +263,7 @@ function AssessmentLeaderboard({ currentUser }: { currentUser: SessionUser }) {
               <SelectTrigger className="w-48"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All domains</SelectItem>
-                {DOMAINS.map(d => <SelectItem key={d.key} value={d.key}>{d.name}</SelectItem>)}
+                {domains.map(d => <SelectItem key={d.key} value={d.key}>{d.name}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
@@ -357,7 +362,7 @@ function SpotlightDialog({ open, onOpenChange, onCreated, canSpotlight }: {
   onCreated: () => void
   canSpotlight: boolean
 }) {
-  const [students, setStudents] = useState<Awaited<ReturnType<typeof listUsersAction>>>([])
+  const [students, setStudents] = useState<Awaited<ReturnType<typeof api.listUsersAction>>>([])
   const [userId, setUserId] = useState<string>('')
   const [reason, setReason] = useState<'streak' | 'solve' | 'reflection'>('streak')
   const [blurb, setBlurb] = useState('')
@@ -447,4 +452,3 @@ function SpotlightDialog({ open, onOpenChange, onCreated, canSpotlight }: {
 }
 
 void Input
-void DOMAINS

@@ -36,12 +36,17 @@ model User {
 }
 
 model Domain {
-  id          String   @id @default(cuid())
-  key         String   @unique // 'java', 'web', 'db', 'quiz', 'python', 'net'
-  name        String
-  description String?
-  color       String   @default("#16a34a")
-  icon        String   @default("Trophy")
+  id            String   @id @default(cuid())
+  key           String   @unique // 'java', 'web', 'db', 'quiz', 'python', 'net'
+  name          String
+  shortName     String   @default("")
+  description   String?
+  color         String   @default("#16a34a")
+  icon          String   @default("Trophy")
+  practiceNote  String   @default("")
+  contestFormat String   @default("")
+  pairBased     Boolean  @default(false)
+  teamSize      Int      @default(1)
 
   captains               DomainCaptain[]
   milestones             Milestone[]
@@ -62,6 +67,7 @@ model DomainCaptain {
 model Milestone {
   id                 String   @id @default(cuid())
   domainId           String
+  seasonId           String
   version            Int      @default(1)
   parentMilestoneId  String?  // links versions of "the same" milestone
   weekOrPhase        String   // 'july-diagnostic', 'aug-w1', 'sep-maint', 'oct-sprint', etc.
@@ -77,6 +83,7 @@ model Milestone {
   updatedAt          DateTime @updatedAt
 
   domain      Domain       @relation(fields: [domainId], references: [id])
+  season      Season       @relation(fields: [seasonId], references: [id], onDelete: Cascade)
   creator     User         @relation("MilestoneCreator", fields: [createdBy], references: [id])
   submissions Submission[]
 }
@@ -104,6 +111,7 @@ model Submission {
 model ProctoredMock {
   id            String   @id @default(cuid())
   domainId      String
+  seasonId      String
   userId        String
   pairPartnerId String?
   score         Float
@@ -112,6 +120,7 @@ model ProctoredMock {
   notes         String?
 
   domain     Domain @relation(fields: [domainId], references: [id])
+  season     Season @relation(fields: [seasonId], references: [id], onDelete: Cascade)
   user       User   @relation("MockSubject", fields: [userId], references: [id])
   partner    User?  @relation("MockPartner", fields: [pairPartnerId], references: [id])
   enteredBy  User   @relation("MockEnteredBy", fields: [enteredById], references: [id])
@@ -120,30 +129,32 @@ model ProctoredMock {
 model TeamSelection {
   id          String   @id @default(cuid())
   domainId    String
+  seasonId    String
   userId      String
   decidedById String
   decidedAt   DateTime @default(now())
   rationale   String?
 
   domain    Domain @relation(fields: [domainId], references: [id])
+  season    Season @relation(fields: [seasonId], references: [id], onDelete: Cascade)
   user      User   @relation("TeamSelected", fields: [userId], references: [id])
   decidedBy User   @relation("TeamDecidedBy", fields: [decidedById], references: [id])
 
-  // One selection per (domain, student) — a student can't be "selected" twice
-  // for the same domain. Exposes the `domainId_userId` compound unique selector
-  // used by selectTeamMemberAction / removeTeamSelectionAction.
-  @@unique([domainId, userId])
+  // One selection per (season, domain, student)
+  @@unique([seasonId, domainId, userId])
 }
 
 model WeeklySpotlight {
   id        String   @id @default(cuid())
   userId    String
+  seasonId  String
   weekOf    DateTime
   reason    String   // 'streak' | 'solve' | 'reflection'
   blurb     String
   createdAt DateTime @default(now())
 
-  user User @relation(fields: [userId], references: [id])
+  user   User   @relation(fields: [userId], references: [id])
+  season Season @relation(fields: [seasonId], references: [id], onDelete: Cascade)
 }
 
 // Staff-only candidate evaluations — from handoff_added.md.
@@ -152,6 +163,7 @@ model WeeklySpotlight {
 model CandidateEvaluation {
   id                String   @id @default(cuid())
   domainId          String
+  seasonId          String
   userId            String                     // the student being evaluated
   pairedWithUserId  String?                    // for Java / Quiz Bee suggested pairings
   evaluatedBy       String                     // captain/instructor who ran it
@@ -166,6 +178,7 @@ model CandidateEvaluation {
   createdAt         DateTime @default(now())
 
   domain       Domain @relation(fields: [domainId], references: [id])
+  season       Season @relation(fields: [seasonId], references: [id], onDelete: Cascade)
   user         User   @relation("EvalSubject", fields: [userId], references: [id])
   pairedWith   User?  @relation("EvalPartner", fields: [pairedWithUserId], references: [id])
   evaluatedBy_ User   @relation("EvalEvaluator", fields: [evaluatedBy], references: [id])
@@ -177,4 +190,44 @@ model AppEvent {
   title     String
   detail    String?
   createdAt DateTime @default(now())
+}
+
+model SystemPromptTemplate {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  template    String
+  mode        String   @default("tutor")
+  createdAt   DateTime @default(now())
+}
+
+model Season {
+  id        String    @id @default(cuid())
+  name      String    @unique
+  startDate DateTime
+  endDate   DateTime
+  status    String    @default("active")
+  createdAt DateTime  @default(now())
+
+  phases           SeasonPhase[]
+  milestones       Milestone[]
+  proctoredMocks   ProctoredMock[]
+  teamSelections   TeamSelection[]
+  weeklySpotlights WeeklySpotlight[]
+  candidateEvaluations CandidateEvaluation[]
+}
+
+model SeasonPhase {
+  id          String   @id @default(cuid())
+  seasonId    String
+  key         String
+  label       String
+  shortLabel  String
+  description String
+  isMockHeavy Boolean  @default(false)
+  sequence    Int
+
+  season      Season   @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+
+  @@unique([seasonId, key])
 }

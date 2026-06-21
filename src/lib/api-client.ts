@@ -44,6 +44,16 @@ import type {
   listCandidateEvaluationsAction, buildEvaluationPromptAction,
   createCandidateEvaluationAction, suggestPairsAction,
   getStudentDashboardDataAction, getInstructorDashboardDataAction, getAdminDashboardDataAction,
+  listSystemPromptTemplatesAction,
+  updateSystemPromptTemplateAction,
+  createDomainAction,
+  updateDomainAction,
+  deleteDomainAction,
+  getActiveSeasonAction,
+  listSeasonsAction,
+  createSeasonAction,
+  updateSeasonAction,
+  deleteSeasonAction,
 } from '@/lib/actions'
 import type { LeaderboardEntry, MilestoneWithMeta, AssessmentLeader, CandidateEvaluationMeta } from '@/lib/actions'
 
@@ -171,4 +181,34 @@ export const api = {
 
   getAdminDashboardDataAction: () =>
     rpc<Awaited<ReturnType<typeof getAdminDashboardDataAction>>>('getAdminDashboardDataAction', []),
+
+  listSystemPromptTemplatesAction: () =>
+    rpc<Awaited<ReturnType<typeof listSystemPromptTemplatesAction>>>('listSystemPromptTemplatesAction', []),
+
+  updateSystemPromptTemplateAction: (...args: Parameters<typeof updateSystemPromptTemplateAction>) =>
+    rpc<Awaited<ReturnType<typeof updateSystemPromptTemplateAction>>>('updateSystemPromptTemplateAction', args),
+
+  createDomainAction: (...args: Parameters<typeof createDomainAction>) =>
+    rpc<Awaited<ReturnType<typeof createDomainAction>>>('createDomainAction', args),
+
+  updateDomainAction: (...args: Parameters<typeof updateDomainAction>) =>
+    rpc<Awaited<ReturnType<typeof updateDomainAction>>>('updateDomainAction', args),
+
+  deleteDomainAction: (...args: Parameters<typeof deleteDomainAction>) =>
+    rpc<Awaited<ReturnType<typeof deleteDomainAction>>>('deleteDomainAction', args),
+
+  getActiveSeasonAction: () =>
+    rpc<Awaited<ReturnType<typeof getActiveSeasonAction>>>('getActiveSeasonAction', []),
+
+  listSeasonsAction: () =>
+    rpc<Awaited<ReturnType<typeof listSeasonsAction>>>('listSeasonsAction', []),
+
+  createSeasonAction: (...args: Parameters<typeof createSeasonAction>) =>
+    rpc<Awaited<ReturnType<typeof createSeasonAction>>>('createSeasonAction', args),
+
+  updateSeasonAction: (...args: Parameters<typeof updateSeasonAction>) =>
+    rpc<Awaited<ReturnType<typeof updateSeasonAction>>>('updateSeasonAction', args),
+
+  deleteSeasonAction: (...args: Parameters<typeof deleteSeasonAction>) =>
+    rpc<Awaited<ReturnType<typeof deleteSeasonAction>>>('deleteSeasonAction', args),
 }

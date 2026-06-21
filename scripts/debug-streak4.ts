@@ -13,7 +13,10 @@ async function main() {
   for (const s of subs) {
     console.log('  at:', s.clientSubmissionTimestamp, 'key:', manilaWeekKey(s.clientSubmissionTimestamp.getTime()))
   }
-  const streak = await computeStreakForUserDomain(tasha.id, dbDom.id)
+  const activeSeason = await db.season.findFirst({ where: { status: 'active' } })
+  if (!activeSeason) { console.log('no active season'); return }
+
+  const streak = await computeStreakForUserDomain(tasha.id, dbDom.id, activeSeason.id)
   console.log('streak:', streak)
 }
 main().then(() => db.$disconnect()).catch(e => { console.error(e); db.$disconnect() })

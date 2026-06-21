@@ -25,6 +25,35 @@ const passwordHash =
 async function main() {
   console.log('Seeding…')
 
+  const season = await db.season.create({
+    data: {
+      name: '2026 Season',
+      startDate: new Date('2026-06-01T00:00:00Z'),
+      endDate: new Date('2026-11-30T23:59:59Z'),
+      status: 'active',
+    }
+  })
+
+  const phaseList = [
+    { key: 'july-diagnostic', label: 'July — Diagnostic Week', shortLabel: 'July', description: 'Diagnostic per domain to find natural strengths. Open trivia nights to recruit.', isMockHeavy: false, sequence: 1 },
+    { key: 'aug-w1',          label: 'August W1 — Practice Starts',    shortLabel: 'Aug W1',  description: 'Captains per domain take the lead. Real practice cycles begin.', isMockHeavy: false, sequence: 2 },
+    { key: 'aug-w2',          label: 'August W2 — Practice',           shortLabel: 'Aug W2',  description: 'Weekly reps continue. Spaced-repetition callbacks to earlier material.', isMockHeavy: false, sequence: 3 },
+    { key: 'aug-w3',          label: 'August W3 — First Scrimmage',    shortLabel: 'Aug W3',  description: 'First scrimmage under timed conditions.', isMockHeavy: true, sequence: 4 },
+    { key: 'aug-w4',          label: 'August W4 — Practice',           shortLabel: 'Aug W4',  description: 'Continue reps. Captains review scrimmage gaps.', isMockHeavy: false, sequence: 5 },
+    { key: 'sep-w1',          label: 'September W1 — Practice',        shortLabel: 'Sep W1',  description: 'Practice continues. Lighter load if exam season overlaps, but milestones stay consistent.', isMockHeavy: false, sequence: 6 },
+    { key: 'sep-w2',          label: 'September W2 — Practice',        shortLabel: 'Sep W2',  description: 'Practice continues. Spaced-repetition callbacks to August material.', isMockHeavy: false, sequence: 7 },
+    { key: 'sep-w3',          label: 'September W3 — Practice',        shortLabel: 'Sep W3',  description: 'Practice continues. Optional async milestones if exam season is heavy.', isMockHeavy: false, sequence: 8 },
+    { key: 'sep-w4',          label: 'September W4 — Practice',        shortLabel: 'Sep W4',  description: 'Practice continues. Last week before October sprint — keep the rhythm.', isMockHeavy: false, sequence: 9 },
+    { key: 'oct-sprint',      label: 'October — Intensive Sprint',     shortLabel: 'Oct',     description: 'Full-dress mock contests in real restricted environment. Pairs finalized.', isMockHeavy: true, sequence: 10 },
+    { key: 'nov-final',       label: 'November — Final Taper',         shortLabel: 'Nov',     description: 'High-frequency mocks for speed and nerves, then light review and real rest.', isMockHeavy: true, sequence: 11 },
+  ]
+
+  for (const p of phaseList) {
+    await db.seasonPhase.create({
+      data: { ...p, seasonId: season.id }
+    })
+  }
+
   const admin = await db.user.create({
     data: {
       email: 'admin@ito.test',
@@ -64,13 +93,115 @@ async function main() {
 
   // --- Domains --------------------------------------------------------------
   const domains = await Promise.all([
-    db.domain.create({ data: { key: 'db',     name: 'Database Management', description: 'SQL fluency under time pressure, mysql CLI via XAMPP.', color: '#0ea5e9', icon: 'Database' } }),
-    db.domain.create({ data: { key: 'java',   name: 'Java Programming',    description: '6 problems in 2 hours. Notepad + CLI only. Pair-based.', color: '#ea580c', icon: 'Code2' } }),
-    db.domain.create({ data: { key: 'quiz',   name: 'IT Quiz Bee',         description: 'Elimination round → tiered final. Broad recall fluency.', color: '#8b5cf6', icon: 'Brain' } }),
-    db.domain.create({ data: { key: 'web',    name: 'Web Design',          description: 'Single themed page in 2 hours. HTML/CSS only, Notepad++.', color: '#ec4899', icon: 'Globe' } }),
-    db.domain.create({ data: { key: 'python', name: 'Python Programming',  description: 'Mechanics TBD — pending official documents.', color: '#16a34a', icon: 'Terminal' } }),
-    db.domain.create({ data: { key: 'net',    name: 'Computer Networking', description: 'Mechanics TBD — pending official documents.', color: '#f59e0b', icon: 'Network' } }),
+    db.domain.create({
+      data: {
+        key: 'db',
+        name: 'Database Management',
+        shortName: 'DB',
+        description: 'SQL fluency under time pressure, mysql CLI via XAMPP.',
+        color: '#0ea5e9',
+        icon: 'Database',
+        practiceNote: 'Raw mysql CLI reps + timed screenshot-to-Word documentation. Winners decided by fastest correct submission.',
+        contestFormat: 'XAMPP + mysql CLI, screenshots in Word doc, fastest correct wins.',
+        pairBased: false,
+      }
+    }),
+    db.domain.create({
+      data: {
+        key: 'java',
+        name: 'Java Programming',
+        shortName: 'Java',
+        description: '6 problems in 2 hours. Notepad + CLI only. Pair-based.',
+        color: '#ea580c',
+        icon: 'Code2',
+        practiceNote: 'No IDE from week one. Practice in Notepad + javac in pairs — that exact restricted setup.',
+        contestFormat: '6 problems, 2 hours, Easy/Average/Difficult tiers, Notepad + CLI, pair-based.',
+        pairBased: true,
+      }
+    }),
+    db.domain.create({
+      data: {
+        key: 'quiz',
+        name: 'IT Quiz Bee',
+        shortName: 'Quiz',
+        description: 'Elimination round → tiered final. Broad recall fluency.',
+        color: '#8b5cf6',
+        icon: 'Brain',
+        practiceNote: 'Broad recall fluency first — the bottleneck is the elimination round, not deep specialization.',
+        contestFormat: 'Elimination round → ~15 schools → tiered final (Easy / Intermediate / Difficult).',
+        pairBased: true,
+      }
+    }),
+    db.domain.create({
+      data: {
+        key: 'web',
+        name: 'Web Design',
+        shortName: 'Web',
+        description: 'Single themed page in 2 hours. HTML/CSS only, Notepad++.',
+        color: '#ec4899',
+        icon: 'Globe',
+        practiceNote: 'Fast, decisive, hand-coded layout against unseen briefs. Only the provided assets.',
+        contestFormat: '1 themed page, 2 hours, HTML/CSS only, Notepad++, day-of assets.',
+        pairBased: false,
+      }
+    }),
+    db.domain.create({
+      data: {
+        key: 'python',
+        name: 'Python Programming',
+        shortName: 'Python',
+        description: 'Mechanics TBD — pending official documents.',
+        color: '#16a34a',
+        icon: 'Terminal',
+        practiceNote: 'Mechanics TBD — same practice loop applies once official docs arrive.',
+        contestFormat: 'TBD — pending official contest documents.',
+        pairBased: false,
+      }
+    }),
+    db.domain.create({
+      data: {
+        key: 'net',
+        name: 'Computer Networking',
+        shortName: 'Net',
+        description: 'Mechanics TBD — pending official documents.',
+        color: '#f59e0b',
+        icon: 'Network',
+        practiceNote: 'Mechanics TBD — same practice loop applies once official docs arrive.',
+        contestFormat: 'TBD — pending official contest documents.',
+        pairBased: false,
+      }
+    }),
   ])
+
+  // --- System Prompt Templates ----------------------------------------------
+  await db.systemPromptTemplate.createMany({
+    data: [
+      {
+        name: 'Tutor Mode Template',
+        description: 'Default prompt for tutor mode milestones',
+        template: 'You are an expert AI tutor helping me prepare for the 15th IT Skills Olympics. Under timed, high-pressure conditions, explain key concepts, guide me step-by-step, but do not solve problems for me. Instead, check my understanding and ask follow-up questions.',
+        mode: 'tutor'
+      },
+      {
+        name: 'Assessment Mode Rubric',
+        description: 'Standard prompt to score submissions against a rubric',
+        template: 'You are an assessor for the IT Skills Olympics. Rate the user\'s solution on a scale of 0 to 100 based on syntax correctness, efficiency, and edge case coverage. Return a JSON block containing "score" (number), "reflection" (string), "confidence" (1-5), and "weaknessTags" (array of strings). Do not provide the solution.',
+        mode: 'assessment'
+      },
+      {
+        name: 'Journal Reflection Template',
+        description: 'Journaling guidelines to log weekly learnings',
+        template: 'Explain what you learned this week, any blockers you encountered, and how you overcame them. Reflect on your trajectory and consistency.',
+        mode: 'journal'
+      },
+      {
+        name: 'candidate_evaluation',
+        description: 'Central evaluation prompt used to analyze student readiness and suggest role divisions',
+        template: 'You are evaluating {{candidate_name}} for the IT Skills Olympics {{domain_name}} team. This is a staff-only read to help a human (the instructor or domain captain) decide whether to select them for the November competition. Your output is INPUT to a human decision, not the decision itself.\n\nCRITICAL RULES:\n- Be honest, specific, and brief. Avoid hedging fluff.\n- Cite the data you\'re drawing on (which weeks, which scores).\n- If the data is thin, say so explicitly in plain language — don\'t invent a confidence score.\n- Don\'t just summarize; give the staff a useful read. What pattern do you see? What\'s the risk? What would you want to see more of before locking in the pick?\n- {{partner_rules}}\n\nDOMAIN: {{domain_name}}\nDOMAIN CONTEXT: {{domain_description}}\nCONTEST FORMAT: {{contest_format}}\n\n{{candidate_identity}}\n\nPRACTICE DATA (most recent first):\n{{practice_data}}\n\nPROCTORED MOCK RESULTS (most recent first):\n{{mock_data}}\n\nEVALUATION BASIS: {{basis}}\n{{basis_guidelines}}\n\nOUTPUT FORMAT (respond as valid JSON, no markdown fences):\n{\n  "aiSummary": "2-4 sentence honest read of where this candidate stands right now",\n  "strengths": ["2-4 specific strengths, citing data where possible"],\n  "weaknesses": ["2-4 specific weaknesses or risks"]{{partner_output_format}},\n  "recommendation": "1-2 sentence coaching note for the instructor — what to watch for, what to drill, whether to lock them in or wait"\n}',
+        mode: 'assessment'
+      }
+    ]
+  })
   const [dbDom, javaDom, quizDom, webDom, pyDom, netDom] = domains
 
   // --- Captains -------------------------------------------------------------
@@ -104,6 +235,7 @@ async function main() {
     return db.milestone.create({
       data: {
         domain: { connect: { id: data.domainId } },
+        season: { connect: { id: season.id } },
         weekOrPhase: data.weekOrPhase,
         mode: data.mode,
         difficulty: data.difficulty,
@@ -505,22 +637,22 @@ Write 150-300 words on:
 
   // --- Proctored mocks (August scrimmage, week 3) --------------------------
   const augScrimmageDate = daysAgo(10)
-  await db.proctoredMock.create({ data: { domain: { connect: { id: javaDom.id } }, user: { connect: { id: lia.id } },  partner: { connect: { id: mark.id } }, score: 50, enteredBy: { connect: { id: instructor.id } }, eventDate: augScrimmageDate, notes: 'Clean solve on easy + average. Bitmask problem stumped them.' } })
-  await db.proctoredMock.create({ data: { domain: { connect: { id: javaDom.id } }, user: { connect: { id: mark.id } }, partner: { connect: { id: lia.id } },  score: 50, enteredBy: { connect: { id: instructor.id } }, eventDate: augScrimmageDate, notes: 'Same pair as lia.' } })
-  await db.proctoredMock.create({ data: { domain: { connect: { id: dbDom.id } },   user: { connect: { id: tasha.id } },                                                score: 70, enteredBy: { connect: { id: instructor.id } }, eventDate: augScrimmageDate, notes: 'Fastest correct in the room. One screenshot failed — would have placed in real contest.' } })
-  await db.proctoredMock.create({ data: { domain: { connect: { id: webDom.id } },  user: { connect: { id: pia.id } },                                                score: 78, enteredBy: { connect: { id: instructor.id } }, eventDate: augScrimmageDate, notes: 'Strong layout, weak responsive — would lose points on mobile in real contest.' } })
-  await db.proctoredMock.create({ data: { domain: { connect: { id: quizDom.id } }, user: { connect: { id: jico.id } },  partner: { connect: { id: rico.id } },  score: 11, enteredBy: { connect: { id: instructor.id } }, eventDate: augScrimmageDate, notes: 'Survived elimination — that was the goal. Intermediate tier got them.' } })
-  await db.proctoredMock.create({ data: { domain: { connect: { id: quizDom.id } }, user: { connect: { id: rico.id } },  partner: { connect: { id: jico.id } },  score: 11, enteredBy: { connect: { id: instructor.id } }, eventDate: augScrimmageDate, notes: 'Same pair as jico.' } })
+  await db.proctoredMock.create({ data: { domain: { connect: { id: javaDom.id } }, season: { connect: { id: season.id } }, user: { connect: { id: lia.id } },  partner: { connect: { id: mark.id } }, score: 50, enteredBy: { connect: { id: instructor.id } }, eventDate: augScrimmageDate, notes: 'Clean solve on easy + average. Bitmask problem stumped them.' } })
+  await db.proctoredMock.create({ data: { domain: { connect: { id: javaDom.id } }, season: { connect: { id: season.id } }, user: { connect: { id: mark.id } }, partner: { connect: { id: lia.id } },  score: 50, enteredBy: { connect: { id: instructor.id } }, eventDate: augScrimmageDate, notes: 'Same pair as lia.' } })
+  await db.proctoredMock.create({ data: { domain: { connect: { id: dbDom.id } },   season: { connect: { id: season.id } }, user: { connect: { id: tasha.id } },                                                score: 70, enteredBy: { connect: { id: instructor.id } }, eventDate: augScrimmageDate, notes: 'Fastest correct in the room. One screenshot failed — would have placed in real contest.' } })
+  await db.proctoredMock.create({ data: { domain: { connect: { id: webDom.id } },  season: { connect: { id: season.id } }, user: { connect: { id: pia.id } },                                                score: 78, enteredBy: { connect: { id: instructor.id } }, eventDate: augScrimmageDate, notes: 'Strong layout, weak responsive — would lose points on mobile in real contest.' } })
+  await db.proctoredMock.create({ data: { domain: { connect: { id: quizDom.id } }, season: { connect: { id: season.id } }, user: { connect: { id: jico.id } },  partner: { connect: { id: rico.id } },  score: 11, enteredBy: { connect: { id: instructor.id } }, eventDate: augScrimmageDate, notes: 'Survived elimination — that was the goal. Intermediate tier got them.' } })
+  await db.proctoredMock.create({ data: { domain: { connect: { id: quizDom.id } }, season: { connect: { id: season.id } }, user: { connect: { id: rico.id } },  partner: { connect: { id: jico.id } },  score: 11, enteredBy: { connect: { id: instructor.id } }, eventDate: augScrimmageDate, notes: 'Same pair as jico.' } })
 
   // --- Team selection (Java pair locked in early based on scrimmage) --------
-  await db.teamSelection.create({ data: { domain: { connect: { id: javaDom.id } }, user: { connect: { id: lia.id } },  decidedBy: { connect: { id: admin.id } }, rationale: 'Highest scrimmage score + longest streak. Locking in early.' } })
-  await db.teamSelection.create({ data: { domain: { connect: { id: javaDom.id } }, user: { connect: { id: mark.id } }, decidedBy: { connect: { id: admin.id } }, rationale: 'Pair partner to lia. Same scrimmage result.' } })
+  await db.teamSelection.create({ data: { domain: { connect: { id: javaDom.id } }, season: { connect: { id: season.id } }, user: { connect: { id: lia.id } },  decidedBy: { connect: { id: admin.id } }, rationale: 'Highest scrimmage score + longest streak. Locking in early.' } })
+  await db.teamSelection.create({ data: { domain: { connect: { id: javaDom.id } }, season: { connect: { id: season.id } }, user: { connect: { id: mark.id } }, decidedBy: { connect: { id: admin.id } }, rationale: 'Pair partner to lia. Same scrimmage result.' } })
 
   // --- Weekly spotlight -----------------------------------------------------
   const thisWeek = new Date(now)
   thisWeek.setHours(0, 0, 0, 0)
   thisWeek.setDate(thisWeek.getDate() - ((thisWeek.getDay() + 6) % 7))
-  await db.weeklySpotlight.create({ data: { user: { connect: { id: lia.id } }, weekOf: thisWeek, reason: 'streak', blurb: '4-week Java streak, kept it alive even on the week she was sick. Discipline over talent.' } })
+  await db.weeklySpotlight.create({ data: { user: { connect: { id: lia.id } }, season: { connect: { id: season.id } }, weekOf: thisWeek, reason: 'streak', blurb: '4-week Java streak, kept it alive even on the week she was sick. Discipline over talent.' } })
 
   // --- App events -----------------------------------------------------------
   await db.appEvent.create({ data: { kind: 'milestone-published', title: 'Java · Week 4 · Difficult Tier Mock published', detail: 'lia.exe published a new assessment milestone', createdAt: daysAgo(7) } })
@@ -533,6 +665,7 @@ Write 150-300 words on:
   await db.candidateEvaluation.create({
     data: {
       domain: { connect: { id: javaDom.id } },
+      season: { connect: { id: season.id } },
       user: { connect: { id: lia.id } },
       pairedWith: { connect: { id: mark.id } },
       evaluatedBy_: { connect: { id: instructor.id } },
@@ -551,6 +684,7 @@ Write 150-300 words on:
   await db.candidateEvaluation.create({
     data: {
       domain: { connect: { id: javaDom.id } },
+      season: { connect: { id: season.id } },
       user: { connect: { id: lia.id } },
       evaluatedBy_: { connect: { id: lia.id } }, // self-eval by captain (unusual but valid for the demo)
       evaluationBasis: 'practice_only',
@@ -566,6 +700,7 @@ Write 150-300 words on:
   await db.candidateEvaluation.create({
     data: {
       domain: { connect: { id: dbDom.id } },
+      season: { connect: { id: season.id } },
       user: { connect: { id: tasha.id } },
       evaluatedBy_: { connect: { id: instructor.id } },
       evaluationBasis: 'combined',

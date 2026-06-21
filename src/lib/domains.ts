@@ -5,96 +5,35 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 
-export type DomainKey = 'db' | 'java' | 'quiz' | 'web' | 'python' | 'net'
-
-export type DomainMeta = {
-  key: DomainKey
-  name: string
-  shortName: string
-  description: string
-  color: string
-  icon: LucideIcon
-  // What practice actually means for this domain (from concept doc)
-  practiceNote: string
-  contestFormat: string
-  pairBased: boolean
-}
-
-export const DOMAINS: DomainMeta[] = [
-  {
-    key: 'db',
-    name: 'Database Management',
-    shortName: 'DB',
-    description: 'SQL fluency under time pressure, mysql CLI via XAMPP, screenshot-proven queries in Word docs.',
-    color: '#0ea5e9',
-    icon: Database,
-    practiceNote: 'Raw mysql CLI reps + timed screenshot-to-Word documentation. Winners decided by fastest correct submission.',
-    contestFormat: 'XAMPP + mysql CLI, screenshots in Word doc, fastest correct wins.',
-    pairBased: false,
-  },
-  {
-    key: 'java',
-    name: 'Java Programming',
-    shortName: 'Java',
-    description: 'Six problems (Easy 10 / Avg 20 / Hard 30 pts) in two hours. Notepad + command line only. Pair-based.',
-    color: '#ea580c',
-    icon: Code2,
-    practiceNote: 'No IDE from week one. Practice in Notepad + javac in pairs — that exact restricted setup.',
-    contestFormat: '6 problems, 2 hours, Easy/Average/Difficult tiers, Notepad + CLI, pair-based.',
-    pairBased: true,
-  },
-  {
-    key: 'quiz',
-    name: 'IT Quiz Bee',
-    shortName: 'Quiz',
-    description: 'Pairs survive elimination, ~15 schools reach tiered final (Easy → Intermediate → Difficult).',
-    color: '#8b5cf6',
-    icon: Brain,
-    practiceNote: 'Broad recall fluency first — the bottleneck is the elimination round, not deep specialization.',
-    contestFormat: 'Elimination round → ~15 schools → tiered final (Easy / Intermediate / Difficult).',
-    pairBased: true,
-  },
-  {
-    key: 'web',
-    name: 'Web Design',
-    shortName: 'Web',
-    description: 'Single themed page in 2 hours. HTML/HTML5 + CSS/CSS3 only. Notepad++. Assets handed over on the day.',
-    color: '#ec4899',
-    icon: Globe,
-    practiceNote: 'Fast, decisive, hand-coded layout against unseen briefs. Only the provided assets.',
-    contestFormat: '1 themed page, 2 hours, HTML/CSS only, Notepad++, day-of assets.',
-    pairBased: false,
-  },
-  {
-    key: 'python',
-    name: 'Python Programming',
-    shortName: 'Python',
-    description: 'Mechanics still being confirmed against official documents — same approach applies once we have them.',
-    color: '#16a34a',
-    icon: Terminal,
-    practiceNote: 'Mechanics TBD — same practice loop applies once official docs arrive.',
-    contestFormat: 'TBD — pending official contest documents.',
-    pairBased: false,
-  },
-  {
-    key: 'net',
-    name: 'Computer Networking',
-    shortName: 'Net',
-    description: 'Mechanics still being confirmed against official documents — same approach applies once we have them.',
-    color: '#f59e0b',
-    icon: Network,
-    practiceNote: 'Mechanics TBD — same practice loop applies once official docs arrive.',
-    contestFormat: 'TBD — pending official contest documents.',
-    pairBased: false,
-  },
+export const DOMAINS = [
+  { key: 'db',     name: 'Database Management', shortName: 'DB', description: 'SQL fluency under time pressure.', color: '#0ea5e9', icon: 'Database', practiceNote: 'Raw mysql CLI reps + timed screenshot-to-Word documentation.', contestFormat: 'XAMPP + mysql CLI, screenshots in Word doc, fastest correct wins.', pairBased: false },
+  { key: 'java',   name: 'Java Programming',    shortName: 'Java', description: 'Notepad + CLI only.', color: '#ea580c', icon: 'Code2', practiceNote: 'No IDE from week one. Practice in Notepad + javac in pairs.', contestFormat: '6 problems, 2 hours, Notepad + CLI, pair-based.', pairBased: true },
+  { key: 'quiz',   name: 'IT Quiz Bee',         shortName: 'Quiz', description: 'Broad recall fluency.', color: '#8b5cf6', icon: 'Brain', practiceNote: 'Broad recall fluency first.', contestFormat: 'Elimination round → tiered final.', pairBased: true },
+  { key: 'web',    name: 'Web Design',          shortName: 'Web', description: 'HTML/CSS only.', color: '#ec4899', icon: 'Globe', practiceNote: 'Fast, decisive, hand-coded layout.', contestFormat: '1 themed page, 2 hours, HTML/CSS only, Notepad++.', pairBased: false },
+  { key: 'python', name: 'Python Programming',  shortName: 'Python', description: 'Mechanics TBD.', color: '#16a34a', icon: 'Terminal', practiceNote: 'Mechanics TBD.', contestFormat: 'TBD.', pairBased: false },
+  { key: 'net',    name: 'Computer Networking', shortName: 'Net', description: 'Mechanics TBD.', color: '#f59e0b', icon: 'Network', practiceNote: 'Mechanics TBD.', contestFormat: 'TBD.', pairBased: false },
 ]
 
-export const DOMAIN_MAP: Record<DomainKey, DomainMeta> = Object.fromEntries(
-  DOMAINS.map(d => [d.key, d]),
-) as Record<DomainKey, DomainMeta>
+export const DOMAIN_ICONS: Record<string, LucideIcon> = {
+  Database,
+  Code2,
+  Brain,
+  Globe,
+  Terminal,
+  Network,
+  Trophy,
+}
 
-export function domainMeta(key: string): DomainMeta {
-  return DOMAIN_MAP[key as DomainKey] ?? DOMAINS[0]
+export function getDomainIcon(name: string): LucideIcon {
+  return DOMAIN_ICONS[name] || Trophy
+}
+
+export function domainMeta(key: string) {
+  const d = DOMAINS.find(x => x.key === key) || DOMAINS[0]
+  return {
+    ...d,
+    icon: getDomainIcon(d.icon)
+  }
 }
 
 // --- Season phases -----------------------------------------------------------

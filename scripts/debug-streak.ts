@@ -24,6 +24,9 @@ async function main() {
     console.log('  sub at:', s.clientSubmissionTimestamp, 'weekKey:', manilaWeekKey(s.clientSubmissionTimestamp.getTime()))
   }
   
+  const activeSeason = await db.season.findFirst({ where: { status: 'active' } })
+  if (!activeSeason) { console.log('no active season'); return }
+
   // Get active week keys for Java
   const weeks = lastNWeekStarts(8)
   console.log('weeks (most recent first):')
@@ -31,14 +34,14 @@ async function main() {
     console.log('  ', w.toISOString(), 'weekKey:', manilaWeekKey(w.getTime()))
   }
   
-  const activeKeys = await getActiveWeekKeysForDomain(java.id, weeks)
+  const activeKeys = await getActiveWeekKeysForDomain(java.id, activeSeason.id, weeks)
   console.log('active week keys for java:', Array.from(activeKeys))
   
   // Compute streak
-  const streak = await computeStreakForUserDomain(lia.id, java.id)
+  const streak = await computeStreakForUserDomain(lia.id, java.id, activeSeason.id)
   console.log('computed streak:', streak)
   
-  const breakdown = await computeStreakBreakdown(lia.id)
+  const breakdown = await computeStreakBreakdown(lia.id, activeSeason.id)
   console.log('breakdown:')
   for (const b of breakdown) {
     console.log('  ', b.domainKey, 'streak:', b.streak, 'thisWeek:', b.thisWeekSubmitted)

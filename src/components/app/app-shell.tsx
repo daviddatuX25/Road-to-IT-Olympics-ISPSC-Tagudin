@@ -3,7 +3,8 @@
 import { useEffect, useState } from 'react'
 import {
   LayoutDashboard, ListChecks, Trophy, ClipboardCheck, Users,
-  UserCog, FileText, UserCircle, LogOut, Menu, X, Loader2, Sparkles, HelpCircle,
+  UserCog, FileText, UserCircle, LogOut, Menu, X, Loader2, Sparkles, HelpCircle, Crown,
+  Sliders, CalendarRange,
 } from 'lucide-react'
 // (Trophy is used for the sidebar brand icon — kept in the main lucide import above.)
 import { Button } from '@/components/ui/button'
@@ -13,12 +14,16 @@ import { Badge } from '@/components/ui/badge'
 import { useApp, type ViewKey } from '@/lib/app-store'
 import { getAvatar } from '@/lib/avatars'
 import type { SessionUser } from '@/lib/auth'
+import { api } from '@/lib/api-client'
 import { Dashboard } from './dashboard'
 import { MilestonesView } from './milestones-view'
 import { LeaderboardView } from './leaderboard-view'
 import { ProcturedMocksView } from './proctored-mocks-view'
 import { TeamSelectionView } from './team-selection-view'
 import { UsersAdmin } from './users-admin'
+import { DomainsAdmin } from './domains-admin'
+import { PromptsAdmin } from './prompts-admin'
+import { SeasonsAdmin } from './seasons-admin'
 import { AdminMilestones } from './admin-milestones'
 import { ProfileSettings } from './profile-settings'
 import { LeadingCandidates } from './leading-candidates'
@@ -42,14 +47,37 @@ const NAV: NavItem[] = [
   { key: 'help',              label: 'Tutorial & Help',    icon: HelpCircle,      roles: ['admin', 'instructor', 'student'], group: 'main' },
   { key: 'leading',           label: 'Leading Candidates', icon: Sparkles,        roles: ['admin', 'instructor', 'student'], group: 'staff' },
   { key: 'admin-milestones',  label: 'Author Milestones',  icon: FileText,        roles: ['admin', 'instructor', 'student'], group: 'staff' },
+  { key: 'admin-prompts',     label: 'Prompt Templates',   icon: Sliders,         roles: ['admin', 'instructor'],           group: 'staff' },
+  { key: 'admin-seasons',     label: 'Manage Seasons',     icon: CalendarRange,   roles: ['admin'],                         group: 'staff' },
   { key: 'admin-users',       label: 'Manage Users',       icon: UserCog,         roles: ['admin'],                         group: 'staff' },
+  { key: 'admin-domains',     label: 'Manage Domains',     icon: Crown,           roles: ['admin'],                         group: 'staff' },
   { key: 'profile',           label: 'Profile',            icon: UserCircle,      roles: ['admin', 'instructor', 'student'], group: 'staff' },
 ]
 
 export function AppShell({ user, onLogout }: { user: SessionUser; onLogout: () => void }) {
   const { view, setView } = useApp()
+  const { setDomains, setPhases, setActiveSeasonId } = useApp()
   const [mobileOpen, setMobileOpen] = useState(false)
   const [loggingOut, setLoggingOut] = useState(false)
+
+  useEffect(() => {
+    async function bootstrap() {
+      try {
+        const [activeSeason, domains] = await Promise.all([
+          api.getActiveSeasonAction(),
+          api.listDomainsAction(),
+        ])
+        if (activeSeason) {
+          setActiveSeasonId(activeSeason.id)
+          setPhases(activeSeason.phases || [])
+        }
+        setDomains(domains)
+      } catch (err) {
+        console.error('Failed to bootstrap app data:', err)
+      }
+    }
+    bootstrap()
+  }, [setDomains, setPhases, setActiveSeasonId])
 
   // Close mobile sidebar when changing views (via setView wrapper, not effect)
   const handleSetView = (v: ViewKey) => {
@@ -152,6 +180,9 @@ export function AppShell({ user, onLogout }: { user: SessionUser; onLogout: () =
           {view === 'help'             && <HelpView />}
           {view === 'leading'          && <LeadingCandidates user={user} />}
           {view === 'admin-users'      && user.role === 'admin' && <UsersAdmin />}
+          {view === 'admin-domains'    && user.role === 'admin' && <DomainsAdmin />}
+          {view === 'admin-prompts'    && (user.role === 'admin' || user.role === 'instructor') && <PromptsAdmin />}
+          {view === 'admin-seasons'    && user.role === 'admin' && <SeasonsAdmin />}
           {view === 'admin-milestones' && <AdminMilestones user={user} />}
           {view === 'profile'          && <ProfileSettings user={user} />}
         </main>

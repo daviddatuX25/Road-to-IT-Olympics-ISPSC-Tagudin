@@ -14,9 +14,10 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Progress } from '@/components/ui/progress'
 import { useApp } from '@/lib/app-store'
 import { getAvatar } from '@/lib/avatars'
-import { domainMeta, phaseLabel } from '@/lib/domains'
+import { getDomainIcon, phaseLabel } from '@/lib/domains'
 import type { SessionUser } from '@/lib/auth'
 import { formatDistanceToNow } from 'date-fns'
+import { manilaWeekKey } from '@/lib/timezone'
 
 export function Dashboard({ user }: { user: SessionUser }) {
   if (user.role === 'student') return <StudentDashboard user={user} />
@@ -30,7 +31,7 @@ export function Dashboard({ user }: { user: SessionUser }) {
 
 function StudentDashboard({ user }: { user: SessionUser }) {
   const { setView, setMilestoneFilter, selectMilestone } = useApp()
-  const [data, setData] = useState<Awaited<ReturnType<typeof getStudentDashboardDataAction>> | null>(null)
+  const [data, setData] = useState<Awaited<ReturnType<typeof api.getStudentDashboardDataAction>> | null>(null)
   const [, startTransition] = useTransition()
 
   useEffect(() => {
@@ -44,17 +45,7 @@ function StudentDashboard({ user }: { user: SessionUser }) {
 
   const bestStreak = Math.max(0, ...data.streakBreakdown.map(b => b.streak))
   const weeksCompleted = data.mySubmissions.length > 0
-    ? new Set(data.mySubmissions.map(s => {
-        const d = new Date(s.clientSubmissionTimestamp as unknown as string)
-        const fmt = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit' })
-        const parts = fmt.formatToParts(d)
-        const get = (t: string) => parts.find(p => p.type === t)?.value ?? ''
-        const y = Number(get('year')), m = Number(get('month')) - 1, day = Number(get('day'))
-        const wd = new Date(Date.UTC(y, m, day)).getUTCDay()
-        const weekday = wd === 0 ? 7 : wd
-        const monday = new Date(Date.UTC(y, m, day - (weekday - 1)))
-        return `${monday.getUTCFullYear()}-${monday.getUTCMonth()}-${monday.getUTCDate()}`
-      })).size
+    ? new Set(data.mySubmissions.map(s => manilaWeekKey(new Date(s.clientSubmissionTimestamp as unknown as string).getTime()))).size
     : 0
   const thisWeekDomains = data.streakBreakdown.filter(b => b.thisWeekSubmitted).length
 
@@ -124,15 +115,14 @@ function StudentDashboard({ user }: { user: SessionUser }) {
         </CardHeader>
         <CardContent className="space-y-3">
           {data.streakBreakdown.map((b) => {
-            const meta = domainMeta(b.domainKey)
-            const Icon = meta.icon
+            const Icon = getDomainIcon(b.domainIcon)
             return (
               <button
                 key={b.domainId}
                 onClick={() => { setMilestoneFilter(b.domainId, null); setView('milestones') }}
                 className="w-full flex items-center gap-3 p-3 rounded-lg border hover:bg-accent/50 transition-colors text-left"
               >
-                <div className="size-9 rounded-md grid place-items-center shrink-0" style={{ background: `${meta.color}20`, color: meta.color }}>
+                <div className="size-9 rounded-md grid place-items-center shrink-0" style={{ background: `${b.domainColor}20`, color: b.domainColor }}>
                   <Icon className="size-4" />
                 </div>
                 <div className="flex-1 min-w-0">
@@ -173,8 +163,8 @@ function StudentDashboard({ user }: { user: SessionUser }) {
             <p className="text-sm text-muted-foreground py-3">No active milestones right now.</p>
           )}
           {data.activeMilestones.slice(0, 4).map((m) => {
-            const meta = domainMeta(m.domain.key)
-            const Icon = meta.icon
+            const Icon = getDomainIcon(m.domain.icon)
+            const color = m.domain.color || '#16a34a'
             const alreadySubmitted = data.mySubmissions.some(s => s.milestoneId === m.id)
             return (
               <button
@@ -182,7 +172,7 @@ function StudentDashboard({ user }: { user: SessionUser }) {
                 onClick={() => { selectMilestone(m.id); setView('milestones') }}
                 className="w-full flex items-center gap-3 p-3 rounded-lg border hover:bg-accent/50 transition-colors text-left"
               >
-                <div className="size-9 rounded-md grid place-items-center shrink-0" style={{ background: `${meta.color}20`, color: meta.color }}>
+                <div className="size-9 rounded-md grid place-items-center shrink-0" style={{ background: `${color}20`, color }}>
                   <Icon className="size-4" />
                 </div>
                 <div className="flex-1 min-w-0">
@@ -212,15 +202,15 @@ function StudentDashboard({ user }: { user: SessionUser }) {
               <p className="text-sm text-muted-foreground py-3">No submissions yet. Pick a milestone to start.</p>
             )}
             {data.mySubmissions.map((s) => {
-              const meta = domainMeta(s.milestone.domain.key)
-              const Icon = meta.icon
+              const Icon = getDomainIcon(s.milestone.domain.icon)
+              const color = s.milestone.domain.color || '#16a34a'
               return (
                 <button
                   key={s.id}
                   onClick={() => { selectMilestone(s.milestoneId); setView('milestones') }}
                   className="w-full flex items-center gap-3 p-2 rounded-md hover:bg-accent/50 transition-colors text-left"
                 >
-                  <div className="size-8 rounded-md grid place-items-center shrink-0" style={{ background: `${meta.color}20`, color: meta.color }}>
+                  <div className="size-8 rounded-md grid place-items-center shrink-0" style={{ background: `${color}20`, color }}>
                     <Icon className="size-3.5" />
                   </div>
                   <div className="flex-1 min-w-0">
@@ -246,11 +236,11 @@ function StudentDashboard({ user }: { user: SessionUser }) {
               <p className="text-sm text-muted-foreground py-3">No proctored mocks yet. First scrimmage is in August.</p>
             )}
             {data.myMocks.map((m) => {
-              const meta = domainMeta(m.domain.key)
-              const Icon = meta.icon
+              const Icon = getDomainIcon(m.domain.icon)
+              const color = m.domain.color || '#16a34a'
               return (
                 <div key={m.id} className="flex items-center gap-3 p-2 rounded-md border">
-                  <div className="size-8 rounded-md grid place-items-center shrink-0" style={{ background: `${meta.color}20`, color: meta.color }}>
+                  <div className="size-8 rounded-md grid place-items-center shrink-0" style={{ background: `${color}20`, color }}>
                     <Icon className="size-3.5" />
                   </div>
                   <div className="flex-1 min-w-0">
@@ -287,8 +277,8 @@ function StudentDashboard({ user }: { user: SessionUser }) {
 
 function InstructorDashboard({ user }: { user: SessionUser }) {
   const { setView } = useApp()
-  const [data, setData] = useState<Awaited<ReturnType<typeof getInstructorDashboardDataAction>> | null>(null)
-  const [events, setEvents] = useState<Awaited<ReturnType<typeof listAppEventsAction>> | null>(null)
+  const [data, setData] = useState<Awaited<ReturnType<typeof api.getInstructorDashboardDataAction>> | null>(null)
+  const [events, setEvents] = useState<Awaited<ReturnType<typeof api.listAppEventsAction>> | null>(null)
 
   useEffect(() => {
     ;(async () => {
@@ -369,7 +359,7 @@ function InstructorDashboard({ user }: { user: SessionUser }) {
 
 function AdminDashboard({ user }: { user: SessionUser }) {
   const { setView } = useApp()
-  const [data, setData] = useState<Awaited<ReturnType<typeof getAdminDashboardDataAction>> | null>(null)
+  const [data, setData] = useState<Awaited<ReturnType<typeof api.getAdminDashboardDataAction>> | null>(null)
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[] | null>(null)
 
   useEffect(() => {
