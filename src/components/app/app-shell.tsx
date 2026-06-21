@@ -6,7 +6,6 @@ import {
   UserCog, FileText, UserCircle, LogOut, Menu, X, Loader2, Sparkles, HelpCircle, Crown,
   Sliders, CalendarRange,
 } from 'lucide-react'
-// (Trophy is used for the sidebar brand icon — kept in the main lucide import above.)
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Separator } from '@/components/ui/separator'
@@ -29,6 +28,11 @@ import { ProfileSettings } from './profile-settings'
 import { LeadingCandidates } from './leading-candidates'
 import { HelpView } from './help-view'
 import { cn } from '@/lib/utils'
+import { idb } from '@/lib/idb'
+import { useOfflineStore } from '@/lib/offline-store'
+import { useConnectivity } from '@/hooks/useConnectivity'
+import { useSync } from '@/hooks/useSync'
+import { OfflineBanner } from './OfflineBanner'
 
 type NavItem = {
   key: ViewKey
@@ -55,10 +59,32 @@ const NAV: NavItem[] = [
 ]
 
 export function AppShell({ user, onLogout }: { user: SessionUser; onLogout: () => void }) {
+  useConnectivity()
+  useSync()
+
   const { view, setView } = useApp()
   const { setDomains, setPhases, setActiveSeasonId } = useApp()
+  const { isOnline, pendingCount, syncStatus } = useOfflineStore()
   const [mobileOpen, setMobileOpen] = useState(false)
   const [loggingOut, setLoggingOut] = useState(false)
+
+  // Cache Integrity Validation: clear cache if user mismatches
+  useEffect(() => {
+    async function validateCache() {
+      try {
+        const cachedUser = await idb.get<any>('rpc-cache', 'current-user')
+        if (cachedUser && user && cachedUser.data?.id !== user.id) {
+          await idb.clear('rpc-cache')
+          await idb.clear('outbox')
+          useOfflineStore.getState().setPendingCount(0)
+          console.warn('[cache] Cleared — user mismatch')
+        }
+      } catch (e) {
+        console.warn('[cache] Validation failed:', e)
+      }
+    }
+    validateCache()
+  }, [user])
 
   useEffect(() => {
     async function bootstrap() {
@@ -77,9 +103,29 @@ export function AppShell({ user, onLogout }: { user: SessionUser; onLogout: () =
       }
     }
     bootstrap()
-  }, [setDomains, setPhases, setActiveSeasonId])
+  }, [setDomains, setPhases, setActiveSeasonId, isOnline])
 
-  // Close mobile sidebar when changing views (via setView wrapper, not effect)
+  const handleLogout = async () => {
+    if (pendingCount > 0) {
+      const confirmLogout = window.confirm(`You have ${pendingCount} unsent action(s) queued offline. If you sign out, these actions will be lost. Are you sure you want to sign out?`)
+      if (!confirmLogout) return
+    }
+
+    setLoggingOut(true)
+    try {
+      await onLogout()
+    } catch (e) {
+      console.error('Logout request failed:', e)
+    } finally {
+      // Clear local cache stores for privacy protection
+      await idb.clear('rpc-cache')
+      await idb.clear('outbox')
+      useOfflineStore.getState().setPendingCount(0)
+      setLoggingOut(false)
+    }
+  }
+
+  // Close mobile sidebar when changing views
   const handleSetView = (v: ViewKey) => {
     setView(v)
     setMobileOpen(false)
@@ -104,105 +150,124 @@ export function AppShell({ user, onLogout }: { user: SessionUser; onLogout: () =
   const avatar = getAvatar(user.avatarId)
 
   return (
-    <div className="min-h-screen flex bg-background">
-      {/* Sidebar — desktop */}
-      <aside className="hidden md:flex w-64 flex-col border-r bg-sidebar/60 backdrop-blur sticky top-0 h-screen">
-        <SidebarContent
-          user={user}
-          mainNav={mainNav}
-          staffNav={staffNav}
-          view={view}
-          setView={handleSetView}
-          onLogout={async () => {
-            setLoggingOut(true)
-            await onLogout()
-          }}
-          loggingOut={loggingOut}
-        />
-      </aside>
+    <div className="min-h-screen flex flex-col bg-background">
+      <OfflineBanner />
+      <div className="flex-1 flex min-h-0">
+        {/* Sidebar — desktop */}
+        <aside className="hidden md:flex w-64 flex-col border-r bg-sidebar/60 backdrop-blur sticky top-0 h-screen">
+          <SidebarContent
+            user={user}
+            mainNav={mainNav}
+            staffNav={staffNav}
+            view={view}
+            setView={handleSetView}
+            onLogout={handleLogout}
+            loggingOut={loggingOut}
+          />
+        </aside>
 
-      {/* Sidebar — mobile drawer */}
-      {mobileOpen && (
-        <div className="fixed inset-0 z-50 md:hidden">
-          <div className="absolute inset-0 bg-black/40" onClick={() => setMobileOpen(false)} />
-          <aside className="absolute left-0 top-0 h-full w-72 bg-sidebar border-r shadow-xl flex flex-col">
-            <div className="flex justify-end p-2">
-              <Button variant="ghost" size="icon" onClick={() => setMobileOpen(false)}>
-                <X className="size-5" />
-              </Button>
-            </div>
-            <SidebarContent
-              user={user}
-              mainNav={mainNav}
-              staffNav={staffNav}
-              view={view}
-              setView={handleSetView}
-              onLogout={async () => {
-                setLoggingOut(true)
-                await onLogout()
-              }}
-              loggingOut={loggingOut}
-            />
-          </aside>
-        </div>
-      )}
-
-      {/* Main content */}
-      <div className="flex-1 flex flex-col min-w-0">
-        <header className="sticky top-0 z-40 border-b bg-background/80 backdrop-blur">
-          <div className="flex items-center justify-between px-4 h-14">
-            <div className="flex items-center gap-2">
-              <Button variant="ghost" size="icon" className="md:hidden" onClick={() => setMobileOpen(true)}>
-                <Menu className="size-5" />
-              </Button>
-              <h1 className="text-base font-semibold tracking-tight">
-                {NAV.find(n => n.key === view)?.label ?? 'Dashboard'}
-              </h1>
-            </div>
-            <div className="flex items-center gap-3">
-              <div className="hidden sm:flex items-center gap-2 text-xs text-muted-foreground">
-                <span className="inline-flex items-center gap-1.5">
-                  <span className="size-2 rounded-full bg-emerald-500 animate-pulse" />
-                  Online · synced
-                </span>
+        {/* Sidebar — mobile drawer */}
+        {mobileOpen && (
+          <div className="fixed inset-0 z-50 md:hidden">
+            <div className="absolute inset-0 bg-black/40" onClick={() => setMobileOpen(false)} />
+            <aside className="absolute left-0 top-0 h-full w-72 bg-sidebar border-r shadow-xl flex flex-col">
+              <div className="flex justify-end p-2">
+                <Button variant="ghost" size="icon" onClick={() => setMobileOpen(false)}>
+                  <X className="size-5" />
+                </Button>
               </div>
-              <button
-                onClick={() => handleSetView('profile')}
-                className="flex items-center gap-2 hover:opacity-80 transition-opacity"
-              >
-                <Avatar className="size-8 border">
-                  <AvatarFallback style={{ background: avatar.color, color: 'white' }} className="text-base">
-                    {avatar.glyph}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="hidden sm:block text-left">
-                  <div className="text-xs font-medium leading-tight">{user.nickname}</div>
-                  <div className="text-[10px] text-muted-foreground capitalize leading-tight">{user.role}</div>
-                </div>
-              </button>
-            </div>
+              <SidebarContent
+                user={user}
+                mainNav={mainNav}
+                staffNav={staffNav}
+                view={view}
+                setView={handleSetView}
+                onLogout={handleLogout}
+                loggingOut={loggingOut}
+              />
+            </aside>
           </div>
-        </header>
+        )}
 
-        <main className="flex-1 p-4 sm:p-6 max-w-7xl w-full mx-auto">
-          {view === 'dashboard'        && <Dashboard user={user} />}
-          {view === 'milestones'       && <MilestonesView user={user} />}
-          {view === 'leaderboard'      && <LeaderboardView currentUser={user} />}
-          {view === 'proctored'        && <ProcturedMocksView user={user} />}
-          {view === 'team'             && <TeamSelectionView user={user} />}
-          {view === 'help'             && <HelpView />}
-          {view === 'leading'          && (user.role === 'admin' || user.role === 'instructor' || (user.captainOf?.length ?? 0) > 0) && <LeadingCandidates user={user} />}
-          {view === 'admin-users'      && user.role === 'admin' && <UsersAdmin />}
-          {view === 'admin-domains'    && user.role === 'admin' && <DomainsAdmin />}
-          {view === 'admin-prompts'    && (user.role === 'admin' || user.role === 'instructor') && <PromptsAdmin />}
-          {view === 'admin-seasons'    && user.role === 'admin' && <SeasonsAdmin />}
-          {view === 'admin-milestones' && (user.role === 'admin' || user.role === 'instructor' || (user.captainOf?.length ?? 0) > 0) && <AdminMilestones user={user} />}
-          {view === 'profile'          && <ProfileSettings user={user} />}
-        </main>
+        {/* Main content */}
+        <div className="flex-1 flex flex-col min-w-0">
+          <header className="sticky top-0 z-40 border-b bg-background/80 backdrop-blur">
+            <div className="flex items-center justify-between px-4 h-14">
+              <div className="flex items-center gap-2">
+                <Button variant="ghost" size="icon" className="md:hidden" onClick={() => setMobileOpen(true)}>
+                  <Menu className="size-5" />
+                </Button>
+                <h1 className="text-base font-semibold tracking-tight">
+                  {NAV.find(n => n.key === view)?.label ?? 'Dashboard'}
+                </h1>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="hidden sm:flex items-center gap-2 text-xs">
+                  {!isOnline ? (
+                    <span className="inline-flex items-center gap-1.5 text-amber-500 font-medium">
+                      <span className="size-2 rounded-full bg-amber-500 animate-pulse" />
+                      Offline {pendingCount > 0 && `· ${pendingCount} pending`}
+                    </span>
+                  ) : syncStatus === 'syncing' ? (
+                    <span className="inline-flex items-center gap-1.5 text-violet-500 font-medium animate-pulse">
+                      <span className="size-2 rounded-full bg-violet-500" />
+                      Syncing...
+                    </span>
+                  ) : syncStatus === 'partial' ? (
+                    <span className="inline-flex items-center gap-1.5 text-amber-500 font-medium">
+                      <span className="size-2 rounded-full bg-amber-500" />
+                      Online · Sync issue
+                    </span>
+                  ) : syncStatus === 'error' ? (
+                    <span className="inline-flex items-center gap-1.5 text-red-500 font-medium">
+                      <span className="size-2 rounded-full bg-red-500 animate-pulse" />
+                      Online · Re-auth needed
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 text-muted-foreground">
+                      <span className="size-2 rounded-full bg-emerald-500" />
+                      Online · synced
+                    </span>
+                  )}
+                </div>
+                <button
+                  onClick={() => handleSetView('profile')}
+                  className="flex items-center gap-2 hover:opacity-80 transition-opacity"
+                >
+                  <Avatar className="size-8 border">
+                    <AvatarFallback style={{ background: avatar.color, color: 'white' }} className="text-base">
+                      {avatar.glyph}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="hidden sm:block text-left">
+                    <div className="text-xs font-medium leading-tight">{user.nickname}</div>
+                    <div className="text-[10px] text-muted-foreground capitalize leading-tight">{user.role}</div>
+                  </div>
+                </button>
+              </div>
+            </div>
+          </header>
 
-        <footer className="mt-auto border-t py-3 px-4 text-center text-xs text-muted-foreground">
-          Road to IT Olympics · practice loop informs the gate, never substitutes for it
-        </footer>
+          <main className="flex-1 p-4 sm:p-6 max-w-7xl w-full mx-auto">
+            {view === 'dashboard'        && <Dashboard user={user} />}
+            {view === 'milestones'       && <MilestonesView user={user} />}
+            {view === 'leaderboard'      && <LeaderboardView currentUser={user} />}
+            {view === 'proctored'        && <ProcturedMocksView user={user} />}
+            {view === 'team'             && <TeamSelectionView user={user} />}
+            {view === 'help'             && <HelpView />}
+            {view === 'leading'          && (user.role === 'admin' || user.role === 'instructor' || (user.captainOf?.length ?? 0) > 0) && <LeadingCandidates user={user} />}
+            {view === 'admin-users'      && user.role === 'admin' && <UsersAdmin />}
+            {view === 'admin-domains'    && user.role === 'admin' && <DomainsAdmin />}
+            {view === 'admin-prompts'    && (user.role === 'admin' || user.role === 'instructor') && <PromptsAdmin />}
+            {view === 'admin-seasons'    && user.role === 'admin' && <SeasonsAdmin />}
+            {view === 'admin-milestones' && (user.role === 'admin' || user.role === 'instructor' || (user.captainOf?.length ?? 0) > 0) && <AdminMilestones user={user} />}
+            {view === 'profile'          && <ProfileSettings user={user} />}
+          </main>
+
+          <footer className="mt-auto border-t py-3 px-4 text-center text-xs text-muted-foreground">
+            Road to IT Olympics · practice loop informs the gate, never substitutes for it
+          </footer>
+        </div>
       </div>
     </div>
   )
@@ -219,6 +284,8 @@ function SidebarContent({
   onLogout: () => void
   loggingOut: boolean
 }) {
+  const { pendingCount } = useOfflineStore()
+
   return (
     <div className="flex flex-col flex-1 min-h-0">
       {/* Brand */}
@@ -237,7 +304,14 @@ function SidebarContent({
       {/* Nav */}
       <nav className="flex-1 overflow-y-auto p-3 space-y-6">
         <div className="space-y-1">
-          <p className="px-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Practice</p>
+          <div className="flex items-center justify-between px-2 py-1">
+            <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Practice</p>
+            {pendingCount > 0 && (
+              <Badge variant="outline" className="px-1.5 py-0 text-[9px] font-semibold bg-amber-500/10 text-amber-500 border-amber-500/20 animate-pulse">
+                {pendingCount} pending
+              </Badge>
+            )}
+          </div>
           {mainNav.map((item) => {
             const Icon = item.icon
             const active = view === item.key

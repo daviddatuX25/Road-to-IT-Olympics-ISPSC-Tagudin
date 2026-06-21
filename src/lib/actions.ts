@@ -451,6 +451,7 @@ export async function submitGuidedFormAction(input: {
   weaknessTags: string[]
   reflection?: string
   aiShareLink?: string
+  clientSubmissionTimestamp?: string | Date
 }): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
   const user = await requireUser()
   const milestone = await db.milestone.findUnique({ where: { id: input.milestoneId } })
@@ -483,12 +484,30 @@ export async function submitGuidedFormAction(input: {
     }
   }
 
+  const clientTimestamp = input.clientSubmissionTimestamp 
+    ? new Date(input.clientSubmissionTimestamp) 
+    : new Date()
+
+  // Logical Idempotency Guard: prevent double-inserting duplicate offline syncs
+  const existingSub = await db.submission.findFirst({
+    where: {
+      userId: user.id,
+      milestoneId: milestone.id,
+      clientSubmissionTimestamp: clientTimestamp,
+      reflection: input.reflection?.trim().slice(0, 5000) || null,
+      aiShareLink: input.aiShareLink?.trim() || null,
+    }
+  })
+  if (existingSub) {
+    return { ok: true, id: existingSub.id }
+  }
+
   const sub = await db.submission.create({
     data: {
       milestone: { connect: { id: milestone.id } },
       milestoneVersion: milestone.version,
       user: { connect: { id: user.id } },
-      clientSubmissionTimestamp: new Date(),
+      clientSubmissionTimestamp: clientTimestamp,
       syncStatus: 'synced',
       inputType: 'guided_form',
       aiShareLink: input.aiShareLink?.trim() || null,
@@ -511,6 +530,7 @@ export async function submitJsonAction(input: {
   milestoneId: string
   jsonPayload: string
   aiShareLink?: string
+  clientSubmissionTimestamp?: string | Date
 }): Promise<{ ok: true; id: string; mode?: 'json' | 'freeform' } | { ok: false; error: string }> {
   const user = await requireUser()
   const milestone = await db.milestone.findUnique({ where: { id: input.milestoneId } })
@@ -575,12 +595,30 @@ export async function submitJsonAction(input: {
     inputType = 'freeform'
   }
 
+  const clientTimestamp = input.clientSubmissionTimestamp 
+    ? new Date(input.clientSubmissionTimestamp) 
+    : new Date()
+
+  // Logical Idempotency Guard: prevent double-inserting duplicate offline syncs
+  const existingSub = await db.submission.findFirst({
+    where: {
+      userId: user.id,
+      milestoneId: milestone.id,
+      clientSubmissionTimestamp: clientTimestamp,
+      reflection,
+      aiShareLink: input.aiShareLink?.trim() || null,
+    }
+  })
+  if (existingSub) {
+    return { ok: true, id: existingSub.id, mode: inputType }
+  }
+
   const sub = await db.submission.create({
     data: {
       milestone: { connect: { id: milestone.id } },
       milestoneVersion: milestone.version,
       user: { connect: { id: user.id } },
-      clientSubmissionTimestamp: new Date(),
+      clientSubmissionTimestamp: clientTimestamp,
       syncStatus: 'synced',
       inputType,
       aiShareLink: input.aiShareLink?.trim() || null,

@@ -5,9 +5,52 @@
 // CSRF protection blocks Server Actions. So we route every call through
 // /api/rpc which dispatches to the same underlying functions.
 
+import { idb } from './idb'
+import {
+  CACHE_POLICY,
+  OUTBOX_POLICY,
+  isCacheableForRole,
+  resolveOutboxConflict,
+  bustRelatedCaches,
+} from './cache-policy'
+import { useOfflineStore } from './offline-store'
+import { toast } from 'sonner'
+
 type RpcResponse<T> = { ok: true; data: T } | { ok: false; error: string }
 
-async function rpc<T>(action: string, args: unknown[]): Promise<T> {
+export class OfflineQueuedError extends Error {
+  action: string
+  constructor(action: string) {
+    super(`Action ${action} has been queued offline.`)
+    this.name = 'OfflineQueuedError'
+    this.action = action
+  }
+}
+
+export class OfflineBlockedError extends Error {
+  action: string
+  constructor(action: string, message: string) {
+    super(message)
+    this.name = 'OfflineBlockedError'
+    this.action = action
+  }
+}
+
+function isNetworkError(err: any): boolean {
+  if (err instanceof TypeError) return true
+  const msg = String(err.message || '').toLowerCase()
+  return msg.includes('network') || msg.includes('failed to fetch') || msg.includes('load failed')
+}
+
+export function friendlyName(action: string): string {
+  if (action === 'submitGuidedFormAction' || action === 'submitJsonAction') return 'Submission'
+  if (action === 'updateProfileAction') return 'Profile Update'
+  if (action === 'selectTeamMemberAction') return 'Team Selection'
+  if (action === 'removeTeamSelectionAction') return 'Team Removal'
+  return action
+}
+
+export async function fetchRpc<T>(action: string, args: unknown[]): Promise<T> {
   const res = await fetch('/api/rpc', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -24,6 +67,110 @@ async function rpc<T>(action: string, args: unknown[]): Promise<T> {
   }
   return json.data
 }
+
+async function rpc<T>(action: string, args: unknown[]): Promise<T> {
+  const { isOnline } = useOfflineStore.getState()
+
+  // Get current cached user details to determine role-based cache policies
+  const userCache = await idb.get<any>('rpc-cache', 'current-user')
+  const currentUser = userCache?.data
+
+  // ── 1. ONLINE: try server first ──
+  if (isOnline) {
+    try {
+      const data = await fetchRpc<T>(action, args)
+
+      // Cache the response if this action is cacheable for this role
+      if (isCacheableForRole(action, currentUser)) {
+        const policy = CACHE_POLICY[action]
+        const key = policy.key(args)
+        await idb.set('rpc-cache', key, { data, cachedAt: Date.now() })
+      }
+
+      // Bust related caches
+      await bustRelatedCaches(action)
+
+      return data
+    } catch (err: any) {
+      if (!isNetworkError(err)) {
+        throw err
+      }
+    }
+  }
+
+  // ── 2. OFFLINE READS: try cache ──
+  if (isCacheableForRole(action, currentUser)) {
+    const policy = CACHE_POLICY[action]
+    const key = policy.key(args)
+    const cached = await idb.get<any>('rpc-cache', key)
+
+    if (cached) {
+      const age = Date.now() - cached.cachedAt
+      const isStale = age > policy.ttlMs
+
+      if (isStale) {
+        console.warn(`[offline] Serving stale cache for ${action} (age: ${Math.round(age / 60000)}min)`)
+      }
+      return cached.data as T
+    }
+    
+    throw new OfflineBlockedError(action, 'You are offline and this data has not been cached yet.')
+  }
+
+  // ── 3. OFFLINE WRITES: queue in outbox ──
+  if (OUTBOX_POLICY[action]) {
+    const policy = OUTBOX_POLICY[action]
+    
+    if (action === 'submitGuidedFormAction' || action === 'submitJsonAction') {
+      if (args[0] && typeof args[0] === 'object') {
+        const inputObj = args[0] as any
+        if (!inputObj.clientSubmissionTimestamp) {
+          inputObj.clientSubmissionTimestamp = new Date().toISOString()
+        }
+      }
+    }
+
+    const dedupKey = policy.dedupKey(args)
+
+    const existing = await idb.getAll<any>('outbox')
+    const resolution = resolveOutboxConflict(
+      { action, args, queuedAt: Date.now(), retries: 0, dedupKey },
+      existing
+    )
+
+    if (resolution.type === 'replace' && resolution.targetId !== undefined) {
+      await idb.replaceOutbox(dedupKey, { action, args, queuedAt: Date.now(), retries: 0, dedupKey })
+      toast.info(`Updated queued ${friendlyName(action)} (offline).`)
+    } else if (resolution.type === 'cancel' && resolution.targetId !== undefined) {
+      await idb.removeOutbox(resolution.targetId)
+      useOfflineStore.getState().decrementPending()
+      toast.info(`Cancelled contradictory queued action (offline).`)
+    } else if (resolution.type === 'push') {
+      await idb.pushOutbox({ action, args, queuedAt: Date.now(), retries: 0, dedupKey })
+      useOfflineStore.getState().incrementPending()
+      toast.info(`${friendlyName(action)} queued. Will sync when back online.`)
+    }
+
+    if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
+      try {
+        const reg = await navigator.serviceWorker.ready
+        if ('sync' in reg) {
+          await (reg as any).sync.register('rio-outbox-sync')
+        }
+      } catch (swErr) {
+        console.warn('[SW Background Sync] Registration failed:', swErr)
+      }
+    }
+
+    throw new OfflineQueuedError(action)
+  }
+
+  // ── 4. NOT CACHEABLE & NOT QUEUEABLE: blocked ──
+  const blockedMessage = 'You must be online to perform this action.'
+  toast.error(blockedMessage)
+  throw new OfflineBlockedError(action, blockedMessage)
+}
+
 
 // Re-export every action with a typed wrapper. This keeps the call sites in
 // components clean — they look the same as calling the server action directly,
