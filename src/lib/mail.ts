@@ -17,7 +17,7 @@ export async function sendResetPasswordEmail(email: string, resetLink: string): 
         Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        from: "Road to IT Olympics <onboarding@resend.dev>", // Default sandbox email for unverified Resend domains
+        from: process.env.RESEND_FROM_EMAIL || "Road to IT Olympics <onboarding@resend.dev>", // Configurable sender email
         to: email,
         subject: "Reset your Password — Road to IT Olympics",
         html: `

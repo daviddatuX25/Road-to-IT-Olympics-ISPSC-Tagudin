@@ -97,6 +97,7 @@ function ResetPasswordForm() {
                   placeholder="At least 8 characters"
                   required
                   disabled={pending}
+                  maxLength={128}
                 />
               </div>
 
@@ -110,6 +111,7 @@ function ResetPasswordForm() {
                   placeholder="Repeat new password"
                   required
                   disabled={pending}
+                  maxLength={128}
                 />
               </div>
 

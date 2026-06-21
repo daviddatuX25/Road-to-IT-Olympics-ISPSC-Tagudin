@@ -70,9 +70,19 @@ export async function logoutAction(): Promise<void> {
   revalidatePath('/')
 }
 
+const resetCooldown = new Map<string, number>()
+
 export async function requestPasswordResetAction(identifier: string): Promise<{ ok: true } | { ok: false; error: string }> {
   const idStr = identifier.trim()
   if (!idStr) return { ok: false, error: 'Identifier (Username, Student ID, or Email) is required.' }
+
+  const now = Date.now()
+  const cooldownKey = idStr.toLowerCase()
+  const lastTime = resetCooldown.get(cooldownKey) || 0
+  if (now - lastTime < 60000) { // 1 minute cooldown per identifier
+    return { ok: true } // Silently succeed to prevent spamming
+  }
+  resetCooldown.set(cooldownKey, now)
 
   const user = await db.user.findFirst({
     where: {
@@ -86,7 +96,7 @@ export async function requestPasswordResetAction(identifier: string): Promise<{ 
   })
 
   if (!user) {
-    return { ok: false, error: 'No account found with that Username / ID.' }
+    return { ok: true } // Silently return success to prevent enumeration
   }
 
   // Prevent requesting resetting password via email if they only have placeholder emails in production
@@ -143,6 +153,8 @@ export async function resetPasswordAction(token: string, newPassword: string): P
       resetTokenExpiry: null,
     }
   })
+
+  await destroySession() // invalidate current session on password change
 
   return { ok: true }
 }
