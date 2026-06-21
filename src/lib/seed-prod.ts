@@ -2,51 +2,55 @@ import { db } from './db'
 import { hashPassword, verifyPassword } from './auth'
 
 export async function seedProduction() {
-  const adminEmail = process.env.ADMIN_EMAIL || 'admin@ito.test'
-  const adminPassword = process.env.ADMIN_PASSWORD || 'olypmics2026'
+  const adminEmail = process.env.ADMIN_EMAIL
+  const adminPassword = process.env.ADMIN_PASSWORD
   const adminRealName = process.env.ADMIN_REALNAME || 'Mara Santos'
   const adminNickname = process.env.ADMIN_NICKNAME || 'Capt. Mara'
 
-  console.log(`[Prod Seed] Running database sync for admin: ${adminEmail}`)
+  if (adminEmail && adminPassword) {
+    console.log(`[Prod Seed] Running database sync for admin: ${adminEmail}`)
 
-  // 1. Seed or update the Admin User
-  const existingAdmin = await db.user.findUnique({
-    where: { email: adminEmail }
-  })
-
-  if (!existingAdmin) {
-    await db.user.create({
-      data: {
-        email: adminEmail,
-        passwordHash: hashPassword(adminPassword),
-        role: 'admin',
-        nickname: adminNickname,
-        realName: adminRealName,
-        studentId: 'ADMIN-001',
-        avatarId: 'avatar-09',
-        status: 'active',
-      }
+    // 1. Seed or update the Admin User
+    const existingAdmin = await db.user.findUnique({
+      where: { email: adminEmail }
     })
-    console.log(`[Prod Seed] Created admin user: ${adminEmail}`)
-  } else {
-    // If admin exists, check if password or name/nickname changed
-    const passwordMatches = verifyPassword(adminPassword, existingAdmin.passwordHash)
-    const nameMatches = existingAdmin.realName === adminRealName
-    const nicknameMatches = existingAdmin.nickname === adminNickname
-    const roleMatches = existingAdmin.role === 'admin'
 
-    if (!passwordMatches || !nameMatches || !nicknameMatches || !roleMatches) {
-      await db.user.update({
-        where: { email: adminEmail },
+    if (!existingAdmin) {
+      await db.user.create({
         data: {
-          passwordHash: passwordMatches ? undefined : hashPassword(adminPassword),
-          realName: adminRealName,
+          email: adminEmail,
+          passwordHash: hashPassword(adminPassword),
+          role: 'admin',
           nickname: adminNickname,
-          role: 'admin', // Ensure the role is indeed admin
+          realName: adminRealName,
+          studentId: 'ADMIN-001',
+          avatarId: 'avatar-09',
+          status: 'active',
         }
       })
-      console.log(`[Prod Seed] Updated admin user configurations for: ${adminEmail}`)
+      console.log(`[Prod Seed] Created admin user: ${adminEmail}`)
+    } else {
+      // If admin exists, check if password or name/nickname changed
+      const passwordMatches = verifyPassword(adminPassword, existingAdmin.passwordHash)
+      const nameMatches = existingAdmin.realName === adminRealName
+      const nicknameMatches = existingAdmin.nickname === adminNickname
+      const roleMatches = existingAdmin.role === 'admin'
+
+      if (!passwordMatches || !nameMatches || !nicknameMatches || !roleMatches) {
+        await db.user.update({
+          where: { email: adminEmail },
+          data: {
+            passwordHash: passwordMatches ? undefined : hashPassword(adminPassword),
+            realName: adminRealName,
+            nickname: adminNickname,
+            role: 'admin', // Ensure the role is indeed admin
+          }
+        })
+        console.log(`[Prod Seed] Updated admin user configurations for: ${adminEmail}`)
+      }
     }
+  } else {
+    console.log('[Prod Seed] ADMIN_EMAIL or ADMIN_PASSWORD not set. Skipping admin user creation.')
   }
 
   // 2. Seed Default Season & Phases if not exists

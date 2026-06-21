@@ -64,7 +64,7 @@ export default function Home() {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-background">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        <p className="mt-3 text-sm text-muted-foreground animate-pulse">Loading The Forge…</p>
+        <p className="mt-3 text-sm text-muted-foreground animate-pulse">Loading Platform…</p>
       </div>
     )
   }
@@ -162,7 +162,7 @@ export default function Home() {
                 <Trophy className="size-5" />
               </div>
               <div>
-                <span className="font-bold tracking-tight text-sm sm:text-base">The Forge</span>
+                <span className="font-bold tracking-tight text-sm sm:text-base">Road to IT Olympics</span>
                 <span className="text-[10px] sm:text-xs text-muted-foreground block -mt-1 font-medium">ISPSC Tagudin Campus</span>
               </div>
             </div>
@@ -182,7 +182,7 @@ export default function Home() {
                 onClick={() => setShowLoginModal(true)}
                 className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm"
               >
-                Enter The Forge
+                Enter Platform
               </Button>
             </div>
           </div>
@@ -212,7 +212,7 @@ export default function Home() {
               onClick={() => setShowLoginModal(true)}
               className="bg-primary hover:bg-primary/90 text-primary-foreground px-8 shadow-lg shadow-primary/10 hover:shadow-primary/25 transition-all text-sm font-semibold h-12 flex items-center gap-2 group"
             >
-              Enter The Forge
+              Enter Platform
               <ArrowRight className="size-4 transition-transform group-hover:translate-x-1" />
             </Button>
             <Button
@@ -374,7 +374,7 @@ export default function Home() {
             {pipelineSteps.map(p => p.shortLabel || p.label).join(' ➡️ ')}
           </p>
           <p className="border-t border-border/10 pt-4">
-            &copy; {new Date().getFullYear()} The Forge · Road to IT Olympics · ISPSC Tagudin Campus. All rights reserved.
+            &copy; {new Date().getFullYear()} Road to IT Olympics · ISPSC Tagudin Campus. All rights reserved.
           </p>
         </footer>
 

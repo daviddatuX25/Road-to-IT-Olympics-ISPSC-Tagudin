@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/sonner";
@@ -13,8 +13,12 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+export const viewport: Viewport = {
+  themeColor: "#6d28d9",
+};
+
 export const metadata: Metadata = {
-  title: "Road to IT Olympics — The Forge",
+  title: "Road to IT Olympics — ISPSC Tagudin Campus",
   description: "Weekly AI-guided practice, streak-based leaderboard, and a real proctored gate for the 15th IT Skills Olympics delegation.",
   keywords: ["IT Skills Olympics", "practice", "leaderboard", "streaks", "competition prep"],
   authors: [{ name: "Road to IT Olympics" }],
@@ -24,14 +28,18 @@ export const metadata: Metadata = {
     apple: "/icon-192.png",
   },
   openGraph: {
-    title: "Road to IT Olympics — The Forge",
+    title: "Road to IT Olympics — ISPSC Tagudin Campus",
     description: "Practice loop + proctored gate for the 15th IT Skills Olympics",
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
-    title: "Road to IT Olympics — The Forge",
+    title: "Road to IT Olympics — ISPSC Tagudin Campus",
     description: "Practice loop + proctored gate for the 15th IT Skills Olympics",
+  },
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
   },
 };
 
@@ -57,16 +65,11 @@ export default function RootLayout({
 
   return (
     <html lang="en" suppressHydrationWarning>
-      <head>
-        <meta name="theme-color" content="#6d28d9" />
-        <meta name="apple-mobile-web-app-capable" content="yes" />
-        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-        <script dangerouslySetInnerHTML={{ __html: themeScript }} />
-        <script dangerouslySetInnerHTML={{ __html: swRegisterScript }} />
-      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased bg-background text-foreground`}
       >
+        <script dangerouslySetInnerHTML={{ __html: themeScript }} />
+        <script dangerouslySetInnerHTML={{ __html: swRegisterScript }} />
         {children}
         <Toaster />
       </body>

@@ -119,52 +119,50 @@ export async function sendDiscordAlert(
     case 'downtime':
       return sendEmbed({
         color: DISCORD_COLORS.RED,
-        title: '🚨 Server Downtime Detected',
-        description: data.errorDetail
-          ? `**Error:** ${data.errorDetail}${data.statusCode ? ` (HTTP ${data.statusCode})` : ''}`
-          : 'The server is not responding to health checks.',
+        title: '🚨 System Alert: Server Offline',
+        description: `### Urgent: Server is not responding to health checks.\n\n` +
+          `❌ **Error detail:** \`${data.errorDetail || 'Connection timeout / No response'}\`${data.statusCode ? ` (HTTP ${data.statusCode})` : ''}`,
         fields: [
-          { name: 'Status', value: '🔴 Offline', inline: true },
-          { name: 'Detected at', value: new Date().toLocaleString('en-PH', { timeZone: 'Asia/Manila' }), inline: true },
+          { name: '🔴 Status', value: 'Offline', inline: true },
+          { name: '📅 Time (PHT)', value: new Date().toLocaleString('en-PH', { timeZone: 'Asia/Manila' }), inline: true },
         ],
-        footer: { text: 'Automated System Alert · Health Monitor' },
+        footer: { text: 'Automated Health Monitor · Road to IT Olympics' },
       })
 
     // ── Event 1b: Server Recovery ─────────────────────────────────────────
     case 'recovery':
       return sendEmbed({
         color: DISCORD_COLORS.GREEN,
-        title: '✅ Server Back Online',
-        description: data.downtimeDuration
-          ? `Service restored. Total downtime: **${data.downtimeDuration}**.`
-          : 'Service has recovered and is responding normally.',
+        title: '✅ System Alert: Server Restored',
+        description: `### Online: Service has recovered and is responding normally.\n\n` +
+          `🟢 **Recovery status:** Service restored successfully.` + 
+          (data.downtimeDuration ? `\n⏳ **Total downtime:** \`${data.downtimeDuration}\`` : ''),
         fields: [
-          { name: 'Status', value: '🟢 Online', inline: true },
-          { name: 'Restored at', value: new Date().toLocaleString('en-PH', { timeZone: 'Asia/Manila' }), inline: true },
+          { name: '🟢 Status', value: 'Online', inline: true },
+          { name: '📅 Restored at (PHT)', value: new Date().toLocaleString('en-PH', { timeZone: 'Asia/Manila' }), inline: true },
         ],
-        footer: { text: 'Automated System Alert · Health Monitor' },
+        footer: { text: 'Automated Health Monitor · Road to IT Olympics' },
       })
 
     // ── Event 2: Leaderboard Update ───────────────────────────────────────
     case 'leaderboard': {
       const top3 = data.top3 ?? []
       const medals = ['🥇', '🥈', '🥉']
+      const standingsList = top3.map((entry, i) => {
+        return `${medals[i] ?? `#${entry.rank}`} **${entry.nickname}**\n` +
+               `┗ 🔥 **${entry.bestStreak}** week streak  •  ✅ **${entry.weeksCompleted}** weeks completed`
+      }).join('\n\n')
+
       return sendEmbed({
         color: DISCORD_COLORS.BLUE,
-        title: '🏆 Leaderboard Updated',
-        description: 'The streak leaderboard has been refreshed. Here are the current top performers:',
-        url: `${appUrl}`,   // Discord makes the title a clickable link when url is set
+        title: '🏆 Leaderboard Refreshed',
+        description: `### Weekly Streak Standings\n\n` +
+          (standingsList || '*No active student streaks yet. Submit milestones to claim the top spot!*'),
+        url: `${appUrl}`,
         fields: [
-          ...top3.map((entry, i) => ({
-            name: `${medals[i] ?? `#${entry.rank}`} ${entry.nickname}`,
-            value: `🔥 **${entry.bestStreak}** week streak · ${entry.weeksCompleted} weeks completed`,
-            inline: false,
-          })),
-          top3.length === 0
-            ? { name: 'No data yet', value: 'Leaderboard will update as students submit.', inline: false }
-            : { name: '📊 View Full Leaderboard', value: `[Open the app](${appUrl})`, inline: false },
+          { name: '📊 View Full Leaderboard', value: `👉 [Open Leaderboard & Check Standings](${appUrl})`, inline: false }
         ],
-        footer: { text: 'Road to IT Olympics · Streak Leaderboard' },
+        footer: { text: 'ISPSC Tagudin Campus · Streak Leaderboard' },
       })
     }
 
@@ -180,20 +178,23 @@ export async function sendDiscordAlert(
       }
       const diff = data.milestoneDifficulty ?? 'unknown'
       const mode = data.milestoneMode ?? 'unknown'
+      const formattedDiff = diff.charAt(0).toUpperCase() + diff.slice(1)
+      const formattedMode = mode.charAt(0).toUpperCase() + mode.slice(1)
+
       return sendEmbed({
         color: DISCORD_COLORS.GOLD,
-        title: `🚀 New Milestone Unlocked: ${data.milestoneTitle ?? 'Untitled'}`,
-        description: `A new milestone is now **active** and ready for submissions.`,
+        title: `🚀 New Milestone Active: ${data.milestoneTitle ?? 'Untitled'}`,
+        description: `### A new milestone has been unlocked for the ISPSC Tagudin delegation!\n\n` +
+          `📂 **Domain:** ${data.milestoneDomain ?? '—'}\n` +
+          `${modeEmoji[mode] ?? '📄'} **Mode:** ${formattedMode}\n` +
+          `${difficultyEmoji[diff] ?? '⚪'} **Difficulty:** ${formattedDiff}\n` +
+          `📅 **Phase:** ${data.milestonePhase ?? '—'}\n\n` +
+          `*Published by **${data.createdBy || 'System'}***`,
         url: `${appUrl}`,
         fields: [
-          { name: '📂 Domain',     value: data.milestoneDomain ?? '—', inline: true },
-          { name: `${modeEmoji[mode] ?? '📄'} Mode`, value: mode.charAt(0).toUpperCase() + mode.slice(1), inline: true },
-          { name: `${difficultyEmoji[diff] ?? '⚪'} Difficulty`, value: diff.charAt(0).toUpperCase() + diff.slice(1), inline: true },
-          { name: '📅 Phase / Week', value: data.milestonePhase ?? '—', inline: true },
-          { name: '👤 Published by', value: data.createdBy ?? '—', inline: true },
-          { name: '📌 Action', value: `[Open milestones](${appUrl})`, inline: true },
+          { name: '✍️ Submissions Open', value: `👉 [Go to Platform & Start Practice](${appUrl})`, inline: false }
         ],
-        footer: { text: 'Keep up the great work! · Road to IT Olympics' },
+        footer: { text: 'Keep practicing! · Road to IT Olympics' },
       })
     }
 

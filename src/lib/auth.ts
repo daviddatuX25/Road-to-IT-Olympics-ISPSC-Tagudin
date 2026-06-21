@@ -56,7 +56,7 @@ export async function createSession(userId: string): Promise<void> {
   jar.set(SESSION_COOKIE, token, {
     httpOnly: true,
     sameSite: 'strict',  // tighten from 'lax' to 'strict' — prevents CSRF from external sites
-    secure: process.env.NODE_ENV === 'production',
+    secure: process.env.NODE_ENV === 'production' && process.env.COOKIE_SECURE !== 'false',
     path: '/',
     maxAge: SESSION_TTL_SECONDS,
   })

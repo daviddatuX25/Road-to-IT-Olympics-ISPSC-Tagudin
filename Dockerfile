@@ -1,6 +1,9 @@
 # ── Stage 1: Build ──────────────────────────────────────────────
 FROM oven/bun:1 AS builder
 
+# Copy Node.js binary from the official image so next build runs under Node.js (averting Bun's React 19 build worker compatibility crash)
+COPY --from=node:20-slim /usr/local/bin/node /usr/local/bin/node
+
 WORKDIR /app
 
 # Build-time deps for native modules (sharp)

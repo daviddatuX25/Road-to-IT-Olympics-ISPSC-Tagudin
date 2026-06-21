@@ -54,7 +54,7 @@ export function Login({ onLogin }: { onLogin: () => void }) {
       {mode === 'signin' ? (
         <>
           <CardHeader className="px-0 pt-0">
-            <CardTitle className="text-xl font-bold tracking-tight">Sign in to The Forge</CardTitle>
+            <CardTitle className="text-xl font-bold tracking-tight">Sign in to Road to IT Olympics</CardTitle>
             <CardDescription>
               Use one of the seeded accounts to explore the platform. Password for all demo accounts:{' '}
               <code className="text-foreground bg-muted px-1.5 py-0.5 rounded text-xs font-semibold">olypmics2026</code>
