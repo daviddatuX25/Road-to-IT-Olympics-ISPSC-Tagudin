@@ -36,12 +36,15 @@ export function PendingShell({
 
   const handleLogout = async () => {
     setLoggingOut(true)
+    const loadingId = toast.loading('Signing you out…')
     try {
       await onLogout()
-      toast.success('Signed out.')
+      toast.dismiss(loadingId)
+      toast.success('Signed out. See you next time!')
     } catch (err: any) {
       console.error('Logout failed:', err)
-      toast.error('Sign out failed.')
+      toast.dismiss(loadingId)
+      toast.error('Sign-out failed. Please try again.')
     } finally {
       setLoggingOut(false)
     }

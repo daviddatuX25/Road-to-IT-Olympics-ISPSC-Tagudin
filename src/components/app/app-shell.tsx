@@ -33,6 +33,7 @@ import { useOfflineStore } from '@/lib/offline-store'
 import { useConnectivity } from '@/hooks/useConnectivity'
 import { useSync } from '@/hooks/useSync'
 import { OfflineBanner } from './OfflineBanner'
+import { toast } from 'sonner'
 
 type NavItem = {
   key: ViewKey
@@ -114,10 +115,15 @@ export function AppShell({ user, onLogout }: { user: SessionUser; onLogout: () =
     }
 
     setLoggingOut(true)
+    const loadingId = toast.loading('Signing you out…')
     try {
       await onLogout()
+      toast.dismiss(loadingId)
+      toast.success('Signed out. See you next time!')
     } catch (e) {
       console.error('Logout request failed:', e)
+      toast.dismiss(loadingId)
+      toast.error('Sign-out failed. Please try again.')
     } finally {
       // Clear local cache stores for privacy protection
       await idb.clear('rpc-cache')

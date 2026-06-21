@@ -59,6 +59,7 @@ export function RegistrationForm({
     }
 
     startTransition(async () => {
+      const loadingId = toast.loading('Submitting your registration…')
       try {
         const res = await api.registerAction({
           studentId: sId,
@@ -67,8 +68,9 @@ export function RegistrationForm({
           password,
           avatarId,
         })
+        toast.dismiss(loadingId)
         if (res.ok) {
-          toast.success('Registration request submitted successfully!')
+          toast.success('Registration submitted! Welcome to the program.')
           if (onLogin) {
             onLogin()
           } else {
@@ -78,6 +80,7 @@ export function RegistrationForm({
           toast.error(res.error)
         }
       } catch (err: any) {
+        toast.dismiss(loadingId)
         toast.error(err.message || 'An unexpected error occurred.')
       }
     })
@@ -113,9 +116,12 @@ export function RegistrationForm({
           id="studentId"
           value={studentId}
           onChange={(e) => setStudentId(e.target.value)}
-          placeholder="e.g. 2026-001"
+          placeholder="e.g. E23-00345 or 2026-001"
           required
         />
+        <p className="text-[11px] text-muted-foreground">
+          Alphanumeric with dashes — e.g. <code className="bg-muted px-1 rounded">E23-00345</code>, <code className="bg-muted px-1 rounded">2026-001</code>
+        </p>
       </div>
 
       <div className="space-y-1.5">

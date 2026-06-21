@@ -39,10 +39,23 @@ export function Login({ onLogin }: { onLogin: () => void }) {
 
   function submit(e: React.FormEvent) {
     e.preventDefault()
+
+    const id = identifier.trim()
+    if (!id) {
+      toast.error('Please enter your ID or username.')
+      return
+    }
+    if (!password) {
+      toast.error('Please enter your password.')
+      return
+    }
+
     startTransition(async () => {
-      const result = await api.loginAction(identifier, password)
+      const loadingId = toast.loading('Signing you in…')
+      const result = await api.loginAction(id, password)
+      toast.dismiss(loadingId)
       if (result.ok) {
-        toast.success('Signed in.')
+        toast.success('Welcome back! Signed in successfully.')
         onLogin()
       } else {
         toast.error(result.error)
@@ -123,7 +136,7 @@ export function Login({ onLogin }: { onLogin: () => void }) {
                       type="text"
                       value={identifier}
                       onChange={(e) => setIdentifier(e.target.value)}
-                      placeholder="e.g. 2024-001 or FAC-001"
+                      placeholder="e.g. E23-00345, 2024-001, FAC-001"
                       required
                     />
                   </div>
