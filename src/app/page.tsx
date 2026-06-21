@@ -139,16 +139,6 @@ export default function Home() {
       }
     ]
 
-    const pipelineSteps = phases.length > 0
-      ? phases.slice().sort((a, b) => a.sequence - b.sequence)
-      : [
-          { label: 'Diagnostics', shortLabel: 'Diagnostics', description: 'Baseline skill identification and platform onboarding.' },
-          { label: 'Scrimmages', shortLabel: 'Scrimmages', description: 'Weekly domain practice sprints with AI auditing.' },
-          { label: 'Spaced Recall', shortLabel: 'Spaced Recall', description: 'Streaks and spaced retention loops.' },
-          { label: 'Intensive Sprint', shortLabel: 'Intensive Sprint', description: 'High-stakes simulated contest mocks.' },
-          { label: 'Finals Selection', shortLabel: 'Finals', description: 'The Gate of Truth proctored scrimmages.' }
-        ]
-
     return (
       <div className="min-h-screen bg-background text-foreground selection:bg-primary/20 flex flex-col relative overflow-hidden">
         {/* Decorative background glow */}
@@ -167,16 +157,21 @@ export default function Home() {
               </div>
             </div>
 
-            <div className="flex items-center gap-4">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setShowLoginModal(true)}
-                className="text-muted-foreground hover:text-foreground flex items-center gap-1.5"
-              >
-                <LogIn className="size-4" />
-                Sign In
-              </Button>
+            <div className="flex items-center gap-3">
+              {discordInviteUrl && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  asChild
+                  className="text-muted-foreground hover:text-foreground flex items-center gap-2"
+                >
+                  <a href={discordInviteUrl} target="_blank" rel="noopener noreferrer">
+                    <DiscordIcon className="size-4 text-[#5865F2]" />
+                    <span className="hidden sm:inline">Join us on Discord</span>
+                    <span className="sm:hidden">Discord</span>
+                  </a>
+                </Button>
+              )}
               <Button
                 size="sm"
                 onClick={() => setShowLoginModal(true)}
@@ -215,13 +210,26 @@ export default function Home() {
               Enter Platform
               <ArrowRight className="size-4 transition-transform group-hover:translate-x-1" />
             </Button>
+            {discordInviteUrl && (
+              <Button
+                variant="outline"
+                size="lg"
+                asChild
+                className="px-8 text-sm font-semibold h-12 border-violet-500/30 hover:border-violet-500 bg-violet-500/5 hover:bg-violet-500/10 text-violet-600 dark:text-violet-400 flex items-center gap-2"
+              >
+                <a href={discordInviteUrl} target="_blank" rel="noopener noreferrer">
+                  <DiscordIcon className="size-4 text-[#5865F2]" />
+                  Join us on Discord
+                </a>
+              </Button>
+            )}
             <Button
-              variant="outline"
+              variant="ghost"
               size="lg"
               onClick={() => {
                 document.getElementById('tracks-section')?.scrollIntoView({ behavior: 'smooth' })
               }}
-              className="px-8 text-sm font-semibold h-12 border-border/80 hover:bg-muted/50"
+              className="px-8 text-sm font-semibold h-12 text-muted-foreground hover:text-foreground"
             >
               Explore Tracks
             </Button>

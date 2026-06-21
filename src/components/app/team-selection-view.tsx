@@ -65,36 +65,24 @@ export function TeamSelectionView({ user }: { user: SessionUser }) {
 
   return (
     <div className="space-y-4">
-      <Card className="border-primary/20 bg-primary/5">
-        <CardContent className="py-4 flex items-start gap-3">
-          <div className="size-9 rounded-full bg-primary/15 text-primary grid place-items-center shrink-0">
-            <Shield className="size-4" />
-          </div>
-          <div className="flex-1">
-            <p className="text-sm font-medium">Team selection — the eligibility gate, decided</p>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              Pair-based contests (Java, Quiz Bee) select two. Solo contests select one. Selections are based ONLY on proctored mock results — practice diagnostics inform but never substitute.
-            </p>
-          </div>
+      <Tabs value={activeDomain} onValueChange={setActiveDomain} className="space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <TabsList className="w-full sm:w-auto justify-start overflow-x-auto flex-wrap h-auto">
+            {domains.map(d => {
+              const Icon = getDomainIcon(d.icon)
+              return (
+                <TabsTrigger key={d.key} value={d.key} className="gap-1.5">
+                  <Icon className="size-3.5" /> {d.shortName || d.key}
+                </TabsTrigger>
+              )
+            })}
+          </TabsList>
           {(isStaff || isCaptain) && (
             <Button onClick={() => setOpen(true)}>
               <UserPlus className="size-4 mr-1" /> Select member
             </Button>
           )}
-        </CardContent>
-      </Card>
-
-      <Tabs value={activeDomain} onValueChange={setActiveDomain}>
-        <TabsList className="w-full justify-start overflow-x-auto flex-wrap h-auto">
-          {domains.map(d => {
-            const Icon = getDomainIcon(d.icon)
-            return (
-              <TabsTrigger key={d.key} value={d.key} className="gap-1.5">
-                <Icon className="size-3.5" /> {d.shortName || d.key}
-              </TabsTrigger>
-            )
-          })}
-        </TabsList>
+        </div>
 
         {domains.map(d => {
           const domSelections = selections.filter(s => s.domain.key === d.key)

@@ -96,7 +96,7 @@ export function HelpView({ user }: { user: SessionUser }) {
           </div>
           <div className="shrink-0 flex items-center">
             <a
-              href="#discord"
+              href={process.env.NEXT_PUBLIC_DISCORD_INVITE_URL || '#'}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-white text-violet-600 hover:bg-white/90 font-semibold text-xs transition-all hover:scale-[1.02] active:scale-[0.98] shadow-sm select-none"
@@ -107,21 +107,6 @@ export function HelpView({ user }: { user: SessionUser }) {
           </div>
         </div>
       </div>
-
-      <Card className="border-primary/20 bg-primary/5">
-        <CardContent className="py-4 flex items-start gap-3">
-          <div className="size-9 rounded-full bg-primary/15 text-primary grid place-items-center shrink-0">
-            <HelpCircle className="size-4" />
-          </div>
-          <div className="flex-1">
-            <p className="text-sm font-medium">Tutorial &amp; system guide</p>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              A walkthrough of every part of the platform — what it does, why it works that way, and how to use it.
-              Jump to any section from the list below.
-            </p>
-          </div>
-        </CardContent>
-      </Card>
 
       <div className="grid gap-4 lg:grid-cols-[220px_1fr]">
         {/* Section rail */}

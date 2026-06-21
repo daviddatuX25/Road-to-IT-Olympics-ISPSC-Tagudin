@@ -61,31 +61,6 @@ export function ProcturedMocksView({ user }: { user: SessionUser }) {
 
   return (
     <div className="space-y-4">
-      <Card className="border-amber-500/30 bg-amber-500/5">
-        <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2">
-            <Shield className="size-4 text-amber-600" /> What are proctored mocks?
-          </CardTitle>
-          <CardDescription>
-            The eligibility gate — the only thing that decides who represents the school in November.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3 text-sm">
-          <p>
-            <strong>Proctored mocks are full-dress rehearsals</strong> run in the literal restricted conditions of the real IT Skills Olympics — Notepad + command line for Java (no IDE), mysql CLI for Database, Notepad++ for Web Design, etc. They are watched live by captains or the instructor. There is no AI in the loop, no take-home, no self-reporting.
-          </p>
-          <p>
-            <strong>Why this exists separately from the weekly practice loop:</strong> practice data is useful as a coaching signal, but a student could inflate their own AI score and no one would know. That&apos;s fine for coaching — not fine for selection. So the weekly loop is low-stakes (informs), and proctored mocks are high-stakes (decides). The first only ever feeds into the second as one input among many; it never substitutes for it.
-          </p>
-          <p>
-            <strong>When they run:</strong> the first scrimmage is in August W3 (lighter, more about nerves than selection). The real ones run in October, in the actual contest environment, with pairs finalized. November is high-frequency mocks for speed, then a real taper before the competition.
-          </p>
-          <p className="text-muted-foreground">
-            <strong>Who can enter scores:</strong> instructors, admins, and the domain&apos;s captain. Notes stay private to staff. The scores themselves are visible to all — that&apos;s the public, in-person record.
-          </p>
-        </CardContent>
-      </Card>
-
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0">
           <div>

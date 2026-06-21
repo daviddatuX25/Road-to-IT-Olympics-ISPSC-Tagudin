@@ -92,30 +92,6 @@ export function LeadingCandidates({ user }: { user: SessionUser }) {
 
   return (
     <div className="space-y-4">
-      <Card className="border-primary/20 bg-primary/5">
-        <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2">
-            <ShieldCheck className="size-4 text-primary" /> Leading Candidates
-          </CardTitle>
-          <CardDescription>
-            A staff-only decision-support panel. AI reads of each candidate, built from practice history and (once they exist) proctored results. Manually triggered per student or pair — never auto-runs.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="text-xs text-muted-foreground space-y-2">
-          <p className="flex items-start gap-2">
-            <AlertCircle className="size-3.5 mt-0.5 shrink-0 text-amber-600" />
-            <span>
-              <strong>The hard line:</strong> this panel never writes to team selections by itself. It produces a recommendation a human reads. A human still has to take the separate, explicit action of creating a team selection from the Team Selection view. No auto-fill, no default-checked box, no bulk approve.
-            </span>
-          </p>
-          <p className="flex items-start gap-2">
-            <AlertCircle className="size-3.5 mt-0.5 shrink-0 text-amber-600" />
-            <span>
-              Students have <strong>no read path</strong> to this data — not even their own evaluation. Seeing &quot;the AI thinks you should be paired with X&quot; before staff have decided would create exactly the kind of premature, gameable signal the system is built to avoid.
-            </span>
-          </p>
-        </CardContent>
-      </Card>
 
       {dbDomains.length === 0 ? (
         <p className="text-sm text-muted-foreground py-8 text-center">No domains available. You may not have captain access to any domain.</p>

@@ -238,19 +238,6 @@ function AssessmentLeaderboard({ currentUser }: { currentUser: SessionUser }) {
 
   return (
     <div className="space-y-4">
-      <Card className="border-primary/20 bg-primary/5">
-        <CardContent className="py-4 flex items-start gap-3">
-          <div className="size-9 rounded-full bg-primary/15 text-primary grid place-items-center shrink-0">
-            <Award className="size-4" />
-          </div>
-          <div className="flex-1">
-            <p className="text-sm font-medium">Assessment leaderboard</p>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              Ranked by total AI assessment scores across the season. Scores come from assessment-mode milestones where the AI grades against a rubric. Reflections and weakness tags stay private — only the aggregate score is public here. Captains and instructors will screen for inflation; cheating hurts the school and yourself.
-            </p>
-          </div>
-        </CardContent>
-      </Card>
 
       <Card>
         <CardHeader>
