@@ -17,7 +17,7 @@ import { useEffect, useState } from 'react'
 import {
   HelpCircle, Flame, ListChecks, Trophy, ClipboardCheck, Users, Sparkles,
   Shield, Lock, BookOpen, Target, GitBranch, Crown, AlertTriangle, CheckCircle2,
-  Code2, Brain, Database, Globe, Network, Terminal, ArrowRight, Lightbulb,
+  Code2, Brain, Database, Globe, Network, Terminal, ArrowRight, Lightbulb, FileText,
 } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -25,11 +25,13 @@ import { useApp, type ViewKey } from '@/lib/app-store'
 import { DOMAINS, MODES, getDomainIcon } from '@/lib/domains'
 import { cn } from '@/lib/utils'
 import { api } from '@/lib/api-client'
+import type { SessionUser } from '@/lib/auth'
+import { TriviaTest } from './trivia-test'
 
 type SectionKey =
   | 'overview' | 'practice-loop' | 'milestones' | 'modes' | 'wall'
   | 'proctored' | 'team' | 'leaderboard' | 'leading' | 'roles'
-  | 'calendar' | 'faq'
+  | 'calendar' | 'faq' | 'trivia'
 
 const SECTIONS: Array<{ key: SectionKey; label: string; icon: typeof HelpCircle }> = [
   { key: 'overview',      label: 'How the system works',  icon: HelpCircle },
@@ -44,11 +46,19 @@ const SECTIONS: Array<{ key: SectionKey; label: string; icon: typeof HelpCircle 
   { key: 'roles',         label: 'Roles & permissions',   icon: Crown },
   { key: 'calendar',      label: 'Season calendar',       icon: Target },
   { key: 'faq',           label: 'Common questions',      icon: Lightbulb },
+  { key: 'trivia',        label: 'Quick Trivia Test',     icon: Brain },
 ]
 
-export function HelpView() {
+export function HelpView({ user }: { user: SessionUser }) {
   const [active, setActive] = useState<SectionKey>('overview')
   const [domains, setDomains] = useState<Awaited<ReturnType<typeof api.listDomainsAction>>>([])
+
+  const isStaff = user.role === 'admin' || user.role === 'instructor' || (user.captainOf?.length ?? 0) > 0
+
+  const filteredSections = SECTIONS.filter(s => {
+    if (s.key === 'leading' && !isStaff) return false
+    return true
+  })
 
   useEffect(() => {
     async function loadDomains() {
@@ -71,6 +81,33 @@ export function HelpView() {
 
   return (
     <div className="space-y-4">
+      {/* Community Discord Banner */}
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-violet-600 via-violet-500 to-amber-500 p-6 text-white shadow-md animate-in fade-in duration-300">
+        {/* Decorative background shape */}
+        <div className="absolute right-0 top-0 -mt-4 -mr-4 size-32 rounded-full bg-white/10 blur-2xl animate-pulse" />
+        <div className="relative flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="space-y-1.5 max-w-2xl">
+            <h3 className="text-base font-bold flex items-center gap-2">
+              <span>🌟</span> You're part of something bigger.
+            </h3>
+            <p className="text-xs text-white/90 leading-relaxed">
+              Our community Discord is where the real prep happens — tips, practice runs, announcements, and teammates cheering each other on. If your account approval is taking longer than expected, just ping an admin there. We're friendly, we're fast, and we want you here. 💬
+            </p>
+          </div>
+          <div className="shrink-0 flex items-center">
+            <a
+              href="#discord"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-white text-violet-600 hover:bg-white/90 font-semibold text-xs transition-all hover:scale-[1.02] active:scale-[0.98] shadow-sm select-none"
+            >
+              Join the Discord Server
+              <ArrowRight className="size-3.5" />
+            </a>
+          </div>
+        </div>
+      </div>
+
       <Card className="border-primary/20 bg-primary/5">
         <CardContent className="py-4 flex items-start gap-3">
           <div className="size-9 rounded-full bg-primary/15 text-primary grid place-items-center shrink-0">
@@ -92,7 +129,7 @@ export function HelpView() {
           <Card>
             <CardContent className="p-2">
               <div className="flex lg:flex-col gap-1 overflow-x-auto lg:overflow-visible">
-                {SECTIONS.map(s => {
+                {filteredSections.map(s => {
                   const Icon = s.icon
                   const isActive = active === s.key
                   return (
@@ -116,18 +153,19 @@ export function HelpView() {
 
         {/* Content */}
         <div id="help-content" className="min-h-[60vh]">
-          {active === 'overview'      && <OverviewSection onJump={setActive} />}
+          {active === 'overview'      && <OverviewSection onJump={setActive} isStaff={isStaff} />}
           {active === 'practice-loop' && <PracticeLoopSection />}
-          {active === 'milestones'    && <MilestonesSection />}
+          {active === 'milestones'    && <MilestonesSection isStaff={isStaff} />}
           {active === 'modes'         && <ModesSection />}
           {active === 'wall'          && <WallSection />}
-          {active === 'proctored'     && <ProctoredSection />}
-          {active === 'team'          && <TeamSection />}
+          {active === 'proctored'     && <ProctoredSection isStaff={isStaff} />}
+          {active === 'team'          && <TeamSection isStaff={isStaff} />}
           {active === 'leaderboard'   && <LeaderboardSection />}
-          {active === 'leading'       && <LeadingSection />}
-          {active === 'roles'         && <RolesSection />}
+          {active === 'leading'       && isStaff && <LeadingSection />}
+          {active === 'roles'         && <RolesSection user={user} />}
           {active === 'calendar'      && <CalendarSection domains={domains} />}
-          {active === 'faq'           && <FaqSection />}
+          {active === 'faq'           && <FaqSection isStaff={isStaff} />}
+          {active === 'trivia'        && <TriviaTest />}
         </div>
       </div>
     </div>
@@ -188,7 +226,7 @@ const DOMAIN_ICONS: Record<string, typeof Code2> = {
 // Sections
 // -----------------------------------------------------------------------------
 
-function OverviewSection({ onJump }: { onJump: (s: SectionKey) => void }) {
+function OverviewSection({ onJump, isStaff }: { onJump: (s: SectionKey) => void; isStaff: boolean }) {
   return (
     <Card>
       <CardHeader>
@@ -236,10 +274,19 @@ function OverviewSection({ onJump }: { onJump: (s: SectionKey) => void }) {
         </ol>
 
         <div className="grid sm:grid-cols-2 gap-2 mt-4 not-prose">
-          <GotoCard view="milestones" icon={ListChecks} title="Browse milestones" desc="See this week's open prompts" />
-          <GotoCard view="leaderboard" icon={Trophy} title="Leaderboard" desc="Where you stand by streak" />
+          {isStaff ? (
+            <>
+              <GotoCard view="admin-milestones" icon={FileText} title="Author Milestones" desc="Create and edit weekly prompts" />
+              <GotoCard view="leading" icon={Sparkles} title="Leading Candidates" desc="Review streaks and evaluate candidates" />
+            </>
+          ) : (
+            <>
+              <GotoCard view="milestones" icon={ListChecks} title="Browse milestones" desc="See this week's open prompts" />
+              <GotoCard view="dashboard" icon={Flame} title="My dashboard" desc="Your streaks and submissions" />
+            </>
+          )}
           <GotoCard view="proctored" icon={ClipboardCheck} title="Proctored mocks" desc="The eligibility gate" />
-          <GotoCard view="dashboard" icon={Flame} title="My dashboard" desc="Your streaks and submissions" />
+          <GotoCard view="leaderboard" icon={Trophy} title="Leaderboard" desc="Where you stand by streak" />
         </div>
       </CardContent>
     </Card>
@@ -300,7 +347,7 @@ function PracticeLoopSection() {
   )
 }
 
-function MilestonesSection() {
+function MilestonesSection({ isStaff }: { isStaff: boolean }) {
   return (
     <Card>
       <CardHeader>
@@ -329,6 +376,16 @@ function MilestonesSection() {
             <em> new version</em>; the old version is archived but still readable.
           </p>
         </Callout>
+
+        {isStaff && (
+          <Callout kind="info" title="Authoring Milestones (Staff Only)">
+            <p>
+              As staff/captain, you can create and manage milestones in the <strong>Author Milestones</strong> view.
+              When you author a milestone, you define its domain, phase, difficulty, mode, and prompt.
+              Once a milestone has student submissions, it locks and cannot be edited.
+            </p>
+          </Callout>
+        )}
 
         <H>How to submit</H>
         <ol className="space-y-1.5 text-sm list-decimal list-inside text-muted-foreground">
@@ -441,7 +498,7 @@ function WallSection() {
   )
 }
 
-function ProctoredSection() {
+function ProctoredSection({ isStaff }: { isStaff: boolean }) {
   return (
     <Card>
       <CardHeader>
@@ -470,6 +527,16 @@ function ProctoredSection() {
           optional pair partner, score, date, who entered it, and optional notes. This keeps the gate auditable.
         </P>
 
+        {isStaff && (
+          <Callout kind="info" title="Entering Mock Scores (Staff Only)">
+            <p>
+              As a staff member or captain, you can record mock results in the <strong>Proctored Mocks</strong> view.
+              You must specify the student, date, score, and optionally their pair partner or private coaching notes.
+              Private notes are visible ONLY to staff.
+            </p>
+          </Callout>
+        )}
+
         <H>What students see</H>
         <P>
           You see your own mock results in full. Other students&apos; mocks are visible (it&apos;s a public, in-person record)
@@ -483,7 +550,7 @@ function ProctoredSection() {
   )
 }
 
-function TeamSection() {
+function TeamSection({ isStaff }: { isStaff: boolean }) {
   return (
     <Card>
       <CardHeader>
@@ -508,15 +575,24 @@ function TeamSection() {
         <ul className="space-y-1.5 text-sm text-muted-foreground">
           <li>The <strong>Team Selection</strong> view has a tab per domain showing filled vs. open slots.</li>
           <li>Mock scores and streaks appear beneath each domain as <em>context</em>, not as the decision itself.</li>
-          <li>Staff can add a selection (with rationale) or remove one. Removing reopens the slot and is logged.</li>
+          {isStaff ? (
+            <li>Staff can add a selection (with rationale) or remove one. Removing reopens the slot and is logged.</li>
+          ) : (
+            <>
+              <li>Students can view active selections, along with who made the selection, when, and the rationale.</li>
+              <li>Students cannot add or remove selections.</li>
+            </>
+          )}
         </ul>
 
-        <Callout kind="warn" title="Selections can be reversed">
-          <p>
-            Removing a team selection is a real action — it reverses the eligibility gate decision and reopens the slot.
-            The confirmation dialog is there on purpose: don&apos;t click through it casually.
-          </p>
-        </Callout>
+        {isStaff && (
+          <Callout kind="warn" title="Selections can be reversed">
+            <p>
+              Removing a team selection is a real action — it reverses the eligibility gate decision and reopens the slot.
+              The confirmation dialog is there on purpose: don&apos;t click through it casually.
+            </p>
+          </Callout>
+        )}
 
         <Goto view="team" label="Go to team selection" />
       </CardContent>
@@ -594,12 +670,13 @@ function LeadingSection() {
   )
 }
 
-function RolesSection() {
+function RolesSection({ user }: { user: SessionUser }) {
+  const isCaptain = (user.captainOf?.length ?? 0) > 0;
   return (
     <Card>
       <CardHeader>
         <CardTitle className="text-lg flex items-center gap-2"><Crown className="size-5 text-amber-500" /> Roles &amp; permissions</CardTitle>
-        <CardDescription>What each role can do.</CardDescription>
+        <CardDescription>What each role can do. Your current role is highlighted below.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
         <div className="space-y-3">
@@ -607,24 +684,28 @@ function RolesSection() {
             icon={Crown}
             color="text-amber-500"
             name="Admin"
+            isCurrent={user.role === 'admin'}
             can={['Everything instructors and captains can do, plus:', 'Provision and delete user accounts', 'Assign / remove domain captains', 'Change user roles', 'Full system overview on the dashboard']}
           />
           <RoleRow
             icon={Target}
             color="text-primary"
             name="Instructor"
+            isCurrent={user.role === 'instructor'}
             can={['Author, edit, and publish milestones across all six domains', 'Enter and delete proctored mock scores', 'Make and remove team selections', 'Create weekly spotlights', 'Use the Leading Candidates panel']}
           />
           <RoleRow
             icon={Shield}
             color="text-emerald-600"
             name="Captain (a student + a domain)"
+            isCurrent={user.role === 'student' && isCaptain}
             can={['Author and edit milestones in their own domain', 'Enter proctored mocks in their domain', 'Select / remove team members in their domain', 'See private diagnostics for their domain', 'Use Leading Candidates for their domain']}
           />
           <RoleRow
             icon={Users}
             color="text-muted-foreground"
             name="Student"
+            isCurrent={user.role === 'student' && !isCaptain}
             can={['Open milestones, copy prompts, submit results', 'See their own private diagnostics', 'See their own proctored mock results', 'See the public leaderboards and the activity feed']}
           />
         </div>
@@ -633,12 +714,28 @@ function RolesSection() {
   )
 }
 
-function RoleRow({ icon: Icon, color, name, can }: { icon: typeof Crown; color: string; name: string; can: string[] }) {
+function RoleRow({ icon: Icon, color, name, can, isCurrent }: {
+  icon: typeof Crown
+  color: string
+  name: string
+  can: string[]
+  isCurrent: boolean
+}) {
   return (
-    <div className="rounded-lg border p-4">
-      <div className="flex items-center gap-2 mb-2">
-        <Icon className={cn('size-4', color)} />
-        <p className="text-sm font-medium">{name}</p>
+    <div className={cn(
+      "rounded-lg border p-4 transition-all",
+      isCurrent ? "border-primary bg-primary/5 ring-1 ring-primary/20 shadow-sm" : "border-border"
+    )}>
+      <div className="flex items-center justify-between gap-2 mb-2">
+        <div className="flex items-center gap-2">
+          <Icon className={cn('size-4', color)} />
+          <p className="text-sm font-medium">{name}</p>
+        </div>
+        {isCurrent && (
+          <Badge className="bg-primary/20 text-primary border-primary/20 text-[10px] uppercase font-semibold tracking-wider hover:bg-primary/20">
+            Your Role
+          </Badge>
+        )}
       </div>
       <ul className="space-y-1 text-xs text-muted-foreground">
         {can.map((c, i) => <li key={i} className="flex gap-1.5"><span className="text-foreground/40">•</span> {c}</li>)}
@@ -702,7 +799,7 @@ function CalendarSection({ domains }: { domains: Awaited<ReturnType<typeof api.l
   )
 }
 
-function FaqSection() {
+function FaqSection({ isStaff }: { isStaff: boolean }) {
   return (
     <Card>
       <CardHeader>
@@ -743,6 +840,16 @@ function FaqSection() {
           The Team Selection view. Each domain shows its filled/open slots, the selection rationale, and mock scores +
           streaks as context.
         </Faq>
+        {isStaff && (
+          <>
+            <Faq q="As staff, how do I create a new season or manage users?">
+              Only users with the <strong>Admin</strong> role can provision users, manage seasons, or change roles. Instructors and captains can manage their respective domains and milestones but cannot perform system administration.
+            </Faq>
+            <Faq q="How do I suggest pairs in the Leading Candidates view?">
+              For pair-based domains like Java and Quiz Bee, open the Leading Candidates view and click <strong>Suggest pairs</strong>. The system will rank student pairs by their combined strengths and highlight complementary weakness areas to help you form the most competitive team.
+            </Faq>
+          </>
+        )}
       </CardContent>
     </Card>
   )

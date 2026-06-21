@@ -91,7 +91,7 @@ function StudentDashboard({ user }: { user: SessionUser }) {
               <CheckCircle2 className="size-4 text-emerald-500" />
             </div>
             <div className="text-3xl font-semibold tracking-tight">{weeksCompleted}</div>
-            <p className="text-xs text-muted-foreground mt-1">Total across all six domains</p>
+            <p className="text-xs text-muted-foreground mt-1">Total across all {data.streakBreakdown.length} domains</p>
           </CardContent>
         </Card>
 
@@ -101,7 +101,7 @@ function StudentDashboard({ user }: { user: SessionUser }) {
               <p className="text-xs uppercase tracking-wider text-muted-foreground">This week</p>
               <Calendar className="size-4 text-primary" />
             </div>
-            <div className="text-3xl font-semibold tracking-tight">{thisWeekDomains}<span className="text-base text-muted-foreground ml-1">/6</span></div>
+            <div className="text-3xl font-semibold tracking-tight">{thisWeekDomains}<span className="text-base text-muted-foreground ml-1">/{data.streakBreakdown.length}</span></div>
             <p className="text-xs text-muted-foreground mt-1">Domains with a submission this week</p>
           </CardContent>
         </Card>
@@ -297,7 +297,7 @@ function InstructorDashboard({ user }: { user: SessionUser }) {
     <div className="space-y-6">
       <div>
         <h2 className="text-xl font-semibold tracking-tight">Welcome back, {user.nickname}</h2>
-        <p className="text-sm text-muted-foreground">You can author milestones across all six domains and watch student progress.</p>
+        <p className="text-sm text-muted-foreground">You can author milestones across all {data.counts.domains} active domains and watch student progress.</p>
       </div>
 
       <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-5">

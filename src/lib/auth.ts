@@ -71,6 +71,7 @@ export type SessionUser = {
   id: string
   email: string
   role: 'admin' | 'instructor' | 'student'
+  status: 'pending' | 'active' | 'rejected'
   nickname: string
   realName: string | null
   studentId: string | null
@@ -103,6 +104,7 @@ export async function getSession(): Promise<SessionUser | null> {
       id: true,
       email: true,
       role: true,
+      status: true,
       nickname: true,
       realName: true,
       studentId: true,
@@ -128,6 +130,12 @@ export async function getSession(): Promise<SessionUser | null> {
 export async function requireUser(): Promise<SessionUser> {
   const user = await getSession()
   if (!user) throw new Error('NOT_AUTHENTICATED')
+  return user
+}
+
+export async function requireActiveUser(): Promise<SessionUser> {
+  const user = await requireUser()
+  if (user.status !== 'active') throw new Error('ACCOUNT_PENDING')
   return user
 }
 

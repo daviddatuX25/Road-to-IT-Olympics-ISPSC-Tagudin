@@ -19,6 +19,7 @@ model User {
   realName      String?
   studentId     String?
   avatarId      String   @default("avatar-01")
+  status        String   @default("active") // 'pending' | 'active' | 'rejected'
   createdAt     DateTime @default(now())
 
   captainOf           DomainCaptain[]

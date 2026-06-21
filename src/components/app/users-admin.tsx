@@ -2,7 +2,7 @@
 
 import { api } from '@/lib/api-client'
 import { useEffect, useState, useTransition } from 'react'
-import { Loader2, Plus, Trash2, Shield, UserCog, Save, X, Crown } from 'lucide-react'
+import { Loader2, Plus, Trash2, Shield, UserCog, Save, X, Crown, AlertTriangle, CheckCircle2 } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -16,6 +16,8 @@ import {
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from '@/components/ui/dialog'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Textarea } from '@/components/ui/textarea'
 import { toast } from 'sonner'
 import { getAvatar, AVATARS } from '@/lib/avatars'
 import { DOMAINS, domainMeta, getDomainIcon } from '@/lib/domains'
@@ -23,13 +25,28 @@ import { DOMAINS, domainMeta, getDomainIcon } from '@/lib/domains'
 export function UsersAdmin() {
   const [users, setUsers] = useState<Awaited<ReturnType<typeof api.listUsersAction>> | null>(null)
   const [domains, setDomains] = useState<Awaited<ReturnType<typeof api.listDomainsAction>> | null>(null)
+  const [pendingUsers, setPendingUsers] = useState<Awaited<ReturnType<typeof api.listPendingUsersAction>> | null>(null)
+  const [pendingCount, setPendingCount] = useState(0)
   const [createOpen, setCreateOpen] = useState(false)
   const [captainOpen, setCaptainOpen] = useState<{ userId: string; nickname: string } | null>(null)
 
+  const [bulkJson, setBulkJson] = useState('')
+  const [bulkPreview, setBulkPreview] = useState<any[] | null>(null)
+  const [bulkErrors, setBulkErrors] = useState<string[]>([])
+  const [bulkResult, setBulkResult] = useState<any | null>(null)
+  const [bulkPending, startBulkTransition] = useTransition()
+  const [pendingActionId, setPendingActionId] = useState<string | null>(null)
+
   async function load() {
-    const [us, ds] = await Promise.all([api.listUsersAction(), api.listDomainsAction()])
+    const [us, ds, pendingList] = await Promise.all([
+      api.listUsersAction(),
+      api.listDomainsAction(),
+      api.listPendingUsersAction(),
+    ])
     setUsers(us)
     setDomains(ds)
+    setPendingUsers(pendingList)
+    setPendingCount(pendingList.length)
   }
 
   useEffect(() => { void load() }, [])
@@ -38,113 +55,460 @@ export function UsersAdmin() {
 
   return (
     <div className="space-y-4">
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0">
-          <div>
-            <CardTitle className="text-base flex items-center gap-2">
-              <UserCog className="size-4" /> Users &amp; roles
-            </CardTitle>
-            <CardDescription>
-              Admin-provisioned accounts. Three roles + per-domain captain join table (so one student can captain Java and just participate in Python).
-            </CardDescription>
-          </div>
-          <Button onClick={() => setCreateOpen(true)}>
-            <Plus className="size-4 mr-1" /> New account
-          </Button>
-        </CardHeader>
-        <CardContent>
-          <div className="rounded-md border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>User</TableHead>
-                  <TableHead>Email</TableHead>
-                  <TableHead>Role</TableHead>
-                  <TableHead>Real name / Student ID</TableHead>
-                  <TableHead>Captain of</TableHead>
-                  <TableHead className="w-10"></TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {users.map(u => {
-                  const avatar = getAvatar(u.avatarId)
-                  return (
-                    <TableRow key={u.id}>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <Avatar className="size-7 border"><AvatarFallback style={{ background: avatar.color, color: 'white' }} className="text-xs">{avatar.glyph}</AvatarFallback></Avatar>
-                          <span className="text-sm font-medium">{u.nickname}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-xs text-muted-foreground font-mono">{u.email}</TableCell>
-                      <TableCell>
-                        <Select
-                          value={u.role}
-                          onValueChange={async (v) => {
-                            const r = await api.updateUserRoleAction(u.id, v as 'admin' | 'instructor' | 'student')
-                            if (r.ok) { toast.success('Role updated.'); void load() } else toast.error(r.error)
-                          }}
-                        >
-                          <SelectTrigger className="h-7 w-32 text-xs"><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="admin">Admin</SelectItem>
-                            <SelectItem value="instructor">Instructor</SelectItem>
-                            <SelectItem value="student">Student</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </TableCell>
-                      <TableCell className="text-xs text-muted-foreground">
-                        {u.realName || '—'}{u.studentId && <span className="ml-2 font-mono">{u.studentId}</span>}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-1 flex-wrap">
-                          {u.captainOf.length === 0 ? (
-                            <button onClick={() => setCaptainOpen({ userId: u.id, nickname: u.nickname })} className="text-xs text-muted-foreground hover:text-foreground">
-                              + assign
-                            </button>
-                          ) : (
-                            <>
-                              {u.captainOf.map(c => {
-                                const meta = domainMeta(c.domain.key)
-                                const Icon = meta.icon
-                                return (
-                                  <Badge key={c.domainId} variant="outline" className="text-[10px] gap-1 pr-1">
-                                    <Icon className="size-2.5" style={{ color: meta.color }} />
-                                    {meta.shortName}
-                                    <button
-                                      onClick={async () => { await api.removeCaptainAction(u.id, c.domainId); void load() }}
-                                      className="ml-0.5 hover:text-destructive"
-                                    >
-                                      <X className="size-2.5" />
-                                    </button>
-                                  </Badge>
-                                )
-                              })}
-                              <button onClick={() => setCaptainOpen({ userId: u.id, nickname: u.nickname })} className="text-xs text-muted-foreground hover:text-foreground ml-1">+</button>
-                            </>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Button
-                          variant="ghost" size="icon"
-                          onClick={async () => {
-                            if (!confirm(`Delete ${u.nickname}? This removes their submissions and history.`)) return
-                            const r = await api.deleteUserAction(u.id)
-                            if (r.ok) { toast.success('Deleted.'); void load() } else toast.error(r.error)
-                          }}
-                        >
-                          <Trash2 className="size-3.5 text-muted-foreground hover:text-destructive" />
-                        </Button>
-                      </TableCell>
+      <Tabs defaultValue="all" className="w-full">
+        <TabsList className="grid w-full grid-cols-3 max-w-md">
+          <TabsTrigger value="all">All Users</TabsTrigger>
+          <TabsTrigger value="pending" className="relative">
+            Pending Approval
+            {pendingCount > 0 && (
+              <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-[10px] font-bold text-destructive-foreground animate-pulse">
+                {pendingCount}
+              </span>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="bulk">Bulk Create</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="all" className="mt-4">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0">
+              <div>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <UserCog className="size-4" /> Users &amp; roles
+                </CardTitle>
+                <CardDescription>
+                  Admin-provisioned accounts. Three roles + per-domain captain join table (so one student can captain Java and just participate in Python).
+                </CardDescription>
+              </div>
+              <Button onClick={() => setCreateOpen(true)}>
+                <Plus className="size-4 mr-1" /> New account
+              </Button>
+            </CardHeader>
+            <CardContent>
+              <div className="rounded-md border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>User</TableHead>
+                      <TableHead>Email</TableHead>
+                      <TableHead>Role</TableHead>
+                      <TableHead>Real name / Student ID</TableHead>
+                      <TableHead>Captain of</TableHead>
+                      <TableHead className="w-10"></TableHead>
                     </TableRow>
-                  )
-                })}
-              </TableBody>
-            </Table>
-          </div>
-        </CardContent>
-      </Card>
+                  </TableHeader>
+                  <TableBody>
+                    {users.map(u => {
+                      const avatar = getAvatar(u.avatarId)
+                      return (
+                        <TableRow key={u.id}>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <Avatar className="size-7 border"><AvatarFallback style={{ background: avatar.color, color: 'white' }} className="text-xs">{avatar.glyph}</AvatarFallback></Avatar>
+                              <span className="text-sm font-medium">{u.nickname}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-xs text-muted-foreground font-mono">{u.email}</TableCell>
+                          <TableCell>
+                            <Select
+                              value={u.role}
+                              onValueChange={async (v) => {
+                                const r = await api.updateUserRoleAction(u.id, v as 'admin' | 'instructor' | 'student')
+                                if (r.ok) { toast.success('Role updated.'); void load() } else toast.error(r.error)
+                              }}
+                            >
+                              <SelectTrigger className="h-7 w-32 text-xs"><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="admin">Admin</SelectItem>
+                                <SelectItem value="instructor">Instructor</SelectItem>
+                                <SelectItem value="student">Student</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </TableCell>
+                          <TableCell className="text-xs text-muted-foreground">
+                            {u.realName || '—'}{u.studentId && <span className="ml-2 font-mono">{u.studentId}</span>}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-1 flex-wrap">
+                              {u.captainOf.length === 0 ? (
+                                <button onClick={() => setCaptainOpen({ userId: u.id, nickname: u.nickname })} className="text-xs text-muted-foreground hover:text-foreground">
+                                  + assign
+                                </button>
+                              ) : (
+                                <>
+                                  {u.captainOf.map(c => {
+                                    const meta = domainMeta(c.domain.key)
+                                    const Icon = meta.icon
+                                    return (
+                                      <Badge key={c.domainId} variant="outline" className="text-[10px] gap-1 pr-1">
+                                        <Icon className="size-2.5" style={{ color: meta.color }} />
+                                        {meta.shortName}
+                                        <button
+                                          onClick={async () => { await api.removeCaptainAction(u.id, c.domainId); void load() }}
+                                          className="ml-0.5 hover:text-destructive"
+                                        >
+                                          <X className="size-2.5" />
+                                        </button>
+                                      </Badge>
+                                    )
+                                  })}
+                                  <button onClick={() => setCaptainOpen({ userId: u.id, nickname: u.nickname })} className="text-xs text-muted-foreground hover:text-foreground ml-1">+</button>
+                                </>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <Button
+                              variant="ghost" size="icon"
+                              onClick={async () => {
+                                if (!confirm(`Delete ${u.nickname}? This removes their submissions and history.`)) return
+                                const r = await api.deleteUserAction(u.id)
+                                if (r.ok) { toast.success('Deleted.'); void load() } else toast.error(r.error)
+                              }}
+                            >
+                              <Trash2 className="size-3.5 text-muted-foreground hover:text-destructive" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="pending" className="mt-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                <UserCog className="size-4" /> Pending Approvals
+              </CardTitle>
+              <CardDescription>
+                Students who self-registered. Approve them to grant access, or reject them.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {pendingUsers === null ? (
+                <div className="flex justify-center py-6">
+                  <Loader2 className="size-5 animate-spin text-muted-foreground" />
+                </div>
+              ) : pendingUsers.length === 0 ? (
+                <div className="text-center py-12 text-muted-foreground space-y-2">
+                  <UserCog className="size-8 mx-auto stroke-1 text-muted-foreground/50" />
+                  <p className="text-sm font-medium">No pending approval requests</p>
+                  <p className="text-xs text-muted-foreground/80">When students self-register, their requests will appear here.</p>
+                </div>
+              ) : (
+                <div className="rounded-md border">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>User</TableHead>
+                        <TableHead>Student ID</TableHead>
+                        <TableHead>Real Name</TableHead>
+                        <TableHead>Registered At</TableHead>
+                        <TableHead className="w-28 text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {pendingUsers.map(u => {
+                        const avatar = getAvatar(u.avatarId)
+                        return (
+                          <TableRow key={u.id}>
+                            <TableCell>
+                              <div className="flex items-center gap-2">
+                                <Avatar className="size-7 border">
+                                  <AvatarFallback style={{ background: avatar.color, color: 'white' }} className="text-xs">
+                                    {avatar.glyph}
+                                  </AvatarFallback>
+                                </Avatar>
+                                <span className="text-sm font-medium">{u.nickname}</span>
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-xs font-mono">{u.studentId || '—'}</TableCell>
+                            <TableCell className="text-xs">{u.realName || '—'}</TableCell>
+                            <TableCell className="text-xs text-muted-foreground">
+                              {new Date(u.createdAt).toLocaleDateString('en-PH', {
+                                month: 'short',
+                                day: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit',
+                              })}
+                            </TableCell>
+                            <TableCell className="text-right space-x-1.5">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500 hover:text-white border-emerald-500/20 text-xs px-2.5 h-7"
+                                disabled={pendingActionId !== null}
+                                onClick={async () => {
+                                  setPendingActionId(u.id)
+                                  try {
+                                    const r = await api.approveUserAction(u.id)
+                                    if (r.ok) {
+                                      toast.success(`Approved ${u.nickname}`)
+                                      void load()
+                                    } else {
+                                      toast.error(r.error)
+                                    }
+                                  } catch (err: any) {
+                                    toast.error(err.message || 'Error approving user')
+                                  } finally {
+                                    setPendingActionId(null)
+                                  }
+                                }}
+                              >
+                                Approve
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="bg-destructive/10 text-destructive hover:bg-destructive hover:text-white border-destructive/20 text-xs px-2.5 h-7"
+                                disabled={pendingActionId !== null}
+                                onClick={async () => {
+                                  if (!confirm(`Are you sure you want to reject ${u.nickname}?`)) return
+                                  setPendingActionId(u.id)
+                                  try {
+                                    const r = await api.rejectUserAction(u.id)
+                                    if (r.ok) {
+                                      toast.success(`Rejected ${u.nickname}`)
+                                      void load()
+                                    } else {
+                                      toast.error(r.error)
+                                    }
+                                  } catch (err: any) {
+                                    toast.error(err.message || 'Error rejecting user')
+                                  } finally {
+                                    setPendingActionId(null)
+                                  }
+                                }}
+                              >
+                                Reject
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        )
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="bulk" className="mt-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                <UserCog className="size-4" /> Bulk Create Users
+              </CardTitle>
+              <CardDescription>
+                Paste a JSON array of student records. The records will be created immediately with "active" status.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="bulk-json">JSON Array</Label>
+                <Textarea
+                  id="bulk-json"
+                  rows={8}
+                  placeholder={`[
+  {
+    "studentId": "2026-001",
+    "nickname": "lia.exe",
+    "realName": "Alia Cruz",
+    "password": "password1234",
+    "role": "student"
+  }
+]`}
+                  value={bulkJson}
+                  onChange={(e) => {
+                    setBulkJson(e.target.value)
+                    setBulkPreview(null)
+                    setBulkErrors([])
+                    setBulkResult(null)
+                  }}
+                  className="font-mono text-xs"
+                />
+              </div>
+
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    if (!bulkJson.trim()) {
+                      toast.error('JSON input is empty.')
+                      return
+                    }
+                    try {
+                      const parsed = JSON.parse(bulkJson)
+                      if (!Array.isArray(parsed)) {
+                        setBulkErrors(['Input must be a JSON array of objects.'])
+                        return
+                      }
+                      const errs: string[] = []
+                      const previewList: any[] = []
+                      
+                      parsed.forEach((item: any, idx: number) => {
+                        const rowNum = idx + 1
+                        if (typeof item !== 'object' || item === null) {
+                          errs.push(`Row ${rowNum}: Record must be an object.`)
+                          return
+                        }
+                        const studentId = String(item.studentId || '').trim()
+                        const nickname = String(item.nickname || '').trim()
+                        const password = String(item.password || '')
+
+                        if (!studentId) {
+                          errs.push(`Row ${rowNum}: studentId is required.`)
+                        } else if (studentId.length < 2 || studentId.length > 20) {
+                          errs.push(`Row ${rowNum}: studentId must be 2-20 characters.`)
+                        } else if (!/^[a-zA-Z0-9-]+$/.test(studentId)) {
+                          errs.push(`Row ${rowNum}: studentId must be alphanumeric and can include dashes.`)
+                        }
+
+                        if (!nickname) {
+                          errs.push(`Row ${rowNum}: nickname is required.`)
+                        } else if (nickname.length < 2 || nickname.length > 32) {
+                          errs.push(`Row ${rowNum}: nickname must be 2-32 characters.`)
+                        }
+
+                        if (!password) {
+                          errs.push(`Row ${rowNum}: password is required.`)
+                        } else if (password.length < 8) {
+                          errs.push(`Row ${rowNum}: password must be at least 8 characters.`)
+                        }
+
+                        const role = item.role || 'student'
+                        if (!['admin', 'instructor', 'student'].includes(role)) {
+                          errs.push(`Row ${rowNum}: role must be admin, instructor, or student.`)
+                        }
+
+                        previewList.push({
+                          studentId,
+                          nickname,
+                          realName: item.realName || '—',
+                          password: '••••••••',
+                          role,
+                        })
+                      })
+
+                      setBulkErrors(errs)
+                      if (errs.length === 0) {
+                        setBulkPreview(previewList)
+                        toast.success('JSON validated successfully! Check preview below.')
+                      } else {
+                        setBulkPreview(null)
+                        toast.error('Validation errors found.')
+                      }
+                    } catch (err: any) {
+                      setBulkErrors([`Invalid JSON format: ${err.message}`])
+                      setBulkPreview(null)
+                      toast.error('Failed to parse JSON.')
+                    }
+                  }}
+                >
+                  Validate JSON
+                </Button>
+                <Button
+                  disabled={bulkPreview === null || bulkPending}
+                  onClick={() => {
+                    if (!bulkPreview) return
+                    startBulkTransition(async () => {
+                      try {
+                        const parsed = JSON.parse(bulkJson)
+                        const res = await api.bulkCreateUsersAction(parsed)
+                        if (res.ok) {
+                          setBulkResult(res)
+                          setBulkPreview(null)
+                          setBulkJson('')
+                          toast.success('Bulk creation completed!')
+                          void load()
+                        } else {
+                          toast.error(res.error)
+                        }
+                      } catch (err: any) {
+                        toast.error(err.message || 'Failed to create records.')
+                      }
+                    })
+                  }}
+                >
+                  {bulkPending ? <Loader2 className="size-4 animate-spin mr-1.5" /> : null}
+                  Create Users
+                </Button>
+              </div>
+
+              {bulkErrors.length > 0 && (
+                <div className="border border-destructive/20 bg-destructive/5 rounded-lg p-3 text-destructive space-y-1">
+                  <div className="flex items-center gap-1.5 text-xs font-semibold">
+                    <AlertTriangle className="size-4" /> Validation Failures ({bulkErrors.length})
+                  </div>
+                  <ul className="text-xs list-disc list-inside space-y-0.5 text-muted-foreground max-h-48 overflow-y-auto font-mono">
+                    {bulkErrors.map((err, i) => (
+                      <li key={i}>{err}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {bulkResult && (
+                <div className="border border-emerald-100 dark:border-emerald-950/40 bg-emerald-500/5 rounded-lg p-3 text-emerald-600 dark:text-emerald-400 space-y-1.5">
+                  <div className="flex items-center gap-1.5 text-xs font-semibold">
+                    <CheckCircle2 className="size-4 text-emerald-500" /> Bulk Results Summary
+                  </div>
+                  <div className="text-xs space-y-0.5 text-muted-foreground">
+                    <p>Created: <span className="font-semibold text-foreground">{bulkResult.created}</span></p>
+                    <p>Skipped/Errors: <span className="font-semibold text-foreground">{bulkResult.skipped}</span></p>
+                  </div>
+                  {bulkResult.errors && bulkResult.errors.length > 0 && (
+                    <div className="border-t pt-2 mt-2 space-y-1">
+                      <p className="text-[10px] uppercase font-semibold tracking-wider text-muted-foreground/80">Skip Details</p>
+                      <ul className="text-[10px] list-disc list-inside space-y-0.5 text-muted-foreground max-h-32 overflow-y-auto font-mono">
+                        {bulkResult.errors.map((err: any, i: number) => (
+                          <li key={i}>
+                            Row {err.row} ({err.studentId || 'N/A'}): {err.reason}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {bulkPreview && (
+                <div className="space-y-2">
+                  <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Batch Preview ({bulkPreview.length} records)</h4>
+                  <div className="rounded-md border max-h-80 overflow-y-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Student ID</TableHead>
+                          <TableHead>Nickname</TableHead>
+                          <TableHead>Real Name</TableHead>
+                          <TableHead>Role</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {bulkPreview.map((p, i) => (
+                          <TableRow key={i}>
+                            <TableCell className="font-mono text-xs">{p.studentId}</TableCell>
+                            <TableCell className="text-xs font-semibold">{p.nickname}</TableCell>
+                            <TableCell className="text-xs">{p.realName}</TableCell>
+                            <TableCell className="text-xs capitalize">{p.role}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
 
       <CreateUserDialog open={createOpen} onOpenChange={setCreateOpen} onSaved={() => { setCreateOpen(false); void load() }} />
       {captainOpen && (

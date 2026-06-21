@@ -67,6 +67,7 @@ export function AppShell({ user, onLogout }: { user: SessionUser; onLogout: () =
   const { isOnline, pendingCount, syncStatus } = useOfflineStore()
   const [mobileOpen, setMobileOpen] = useState(false)
   const [loggingOut, setLoggingOut] = useState(false)
+  const [activeSeasonName, setActiveSeasonName] = useState<string>('')
 
   // Cache Integrity Validation: clear cache if user mismatches
   useEffect(() => {
@@ -96,6 +97,7 @@ export function AppShell({ user, onLogout }: { user: SessionUser; onLogout: () =
         if (activeSeason) {
           setActiveSeasonId(activeSeason.id)
           setPhases(activeSeason.phases || [])
+          setActiveSeasonName(activeSeason.name)
         }
         setDomains(domains)
       } catch (err) {
@@ -163,6 +165,7 @@ export function AppShell({ user, onLogout }: { user: SessionUser; onLogout: () =
             setView={handleSetView}
             onLogout={handleLogout}
             loggingOut={loggingOut}
+            activeSeasonName={activeSeasonName}
           />
         </aside>
 
@@ -184,6 +187,7 @@ export function AppShell({ user, onLogout }: { user: SessionUser; onLogout: () =
                 setView={handleSetView}
                 onLogout={handleLogout}
                 loggingOut={loggingOut}
+                activeSeasonName={activeSeasonName}
               />
             </aside>
           </div>
@@ -254,7 +258,7 @@ export function AppShell({ user, onLogout }: { user: SessionUser; onLogout: () =
             {view === 'leaderboard'      && <LeaderboardView currentUser={user} />}
             {view === 'proctored'        && <ProcturedMocksView user={user} />}
             {view === 'team'             && <TeamSelectionView user={user} />}
-            {view === 'help'             && <HelpView />}
+            {view === 'help'             && <HelpView user={user} />}
             {view === 'leading'          && (user.role === 'admin' || user.role === 'instructor' || (user.captainOf?.length ?? 0) > 0) && <LeadingCandidates user={user} />}
             {view === 'admin-users'      && user.role === 'admin' && <UsersAdmin />}
             {view === 'admin-domains'    && user.role === 'admin' && <DomainsAdmin />}
@@ -265,7 +269,7 @@ export function AppShell({ user, onLogout }: { user: SessionUser; onLogout: () =
           </main>
 
           <footer className="mt-auto border-t py-3 px-4 text-center text-xs text-muted-foreground">
-            Road to IT Olympics · practice loop informs the gate, never substitutes for it
+            ISPSC Tagudin · {activeSeasonName || 'Road to IT Olympics'} · practice loop informs the gate, never substitutes for it
           </footer>
         </div>
       </div>
@@ -274,7 +278,7 @@ export function AppShell({ user, onLogout }: { user: SessionUser; onLogout: () =
 }
 
 function SidebarContent({
-  user, mainNav, staffNav, view, setView, onLogout, loggingOut,
+  user, mainNav, staffNav, view, setView, onLogout, loggingOut, activeSeasonName,
 }: {
   user: SessionUser
   mainNav: NavItem[]
@@ -283,6 +287,7 @@ function SidebarContent({
   setView: (v: ViewKey) => void
   onLogout: () => void
   loggingOut: boolean
+  activeSeasonName: string
 }) {
   const { pendingCount } = useOfflineStore()
 
@@ -296,7 +301,9 @@ function SidebarContent({
           </div>
           <div className="min-w-0">
             <p className="text-sm font-semibold leading-tight truncate">Road to IT Olympics</p>
-            <p className="text-[10px] text-muted-foreground uppercase tracking-wider">15th Skills Olympics</p>
+            <p className="text-[10px] text-muted-foreground uppercase tracking-wider truncate">
+              ISPSC Tagudin · {activeSeasonName || 'Skills Olympics'}
+            </p>
           </div>
         </div>
       </div>

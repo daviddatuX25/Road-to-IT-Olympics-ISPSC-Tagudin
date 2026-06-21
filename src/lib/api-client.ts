@@ -179,6 +179,7 @@ import type {
   loginAction, logoutAction, getCurrentUser, updateProfileAction,
   listUsersAction, createUserAction, updateUserRoleAction, deleteUserAction,
   assignCaptainAction, removeCaptainAction,
+  registerAction, listPendingUsersAction, approveUserAction, rejectUserAction, bulkCreateUsersAction,
   listDomainsAction,
   listMilestoneMetaAction, getMilestoneAction, createMilestoneAction,
   versionMilestoneAction, archiveMilestoneAction, activateMilestoneAction,
@@ -358,4 +359,19 @@ export const api = {
 
   deleteSeasonAction: (...args: Parameters<typeof deleteSeasonAction>) =>
     rpc<Awaited<ReturnType<typeof deleteSeasonAction>>>('deleteSeasonAction', args),
+
+  registerAction: (...args: Parameters<typeof registerAction>) =>
+    rpc<Awaited<ReturnType<typeof registerAction>>>('registerAction', args),
+
+  listPendingUsersAction: () =>
+    rpc<Awaited<ReturnType<typeof listPendingUsersAction>>>('listPendingUsersAction', []),
+
+  approveUserAction: (...args: Parameters<typeof approveUserAction>) =>
+    rpc<Awaited<ReturnType<typeof approveUserAction>>>('approveUserAction', args),
+
+  rejectUserAction: (...args: Parameters<typeof rejectUserAction>) =>
+    rpc<Awaited<ReturnType<typeof rejectUserAction>>>('rejectUserAction', args),
+
+  bulkCreateUsersAction: (...args: Parameters<typeof bulkCreateUsersAction>) =>
+    rpc<Awaited<ReturnType<typeof bulkCreateUsersAction>>>('bulkCreateUsersAction', args),
 }

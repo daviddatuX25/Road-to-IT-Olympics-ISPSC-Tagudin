@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { db } from '@/lib/db'
 import {
-  createSession, destroySession, getSession, requireUser, requireRole,
+  createSession, destroySession, getSession, requireUser, requireActiveUser, requireRole,
   verifyPassword, hashPassword,
 } from '@/lib/auth'
 import { AVATAR_MAP } from '@/lib/avatars'
@@ -40,15 +40,22 @@ export async function getActiveSeasonAction() {
 // Auth
 // -----------------------------------------------------------------------------
 
-export async function loginAction(email: string, password: string): Promise<{ ok: true } | { ok: false; error: string }> {
-  const normalizedEmail = email.toLowerCase().trim()
-  if (!normalizedEmail || !password) return { ok: false, error: 'Email and password required.' }
-  // Basic email format check
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
-    return { ok: false, error: 'Invalid email format.' }
-  }
-  const user = await db.user.findUnique({ where: { email: normalizedEmail } })
-  if (!user) return { ok: false, error: 'No account with that email.' }
+export async function loginAction(identifier: string, password: string): Promise<{ ok: true } | { ok: false; error: string }> {
+  const idStr = identifier.trim()
+  if (!idStr || !password) return { ok: false, error: 'Username / ID and password required.' }
+
+  const user = await db.user.findFirst({
+    where: {
+      OR: [
+        { studentId: idStr },
+        { studentId: idStr.toUpperCase() },
+        { studentId: idStr.toLowerCase() },
+        { email: idStr.toLowerCase() },
+      ]
+    }
+  })
+
+  if (!user) return { ok: false, error: 'No account found with that Username / ID.' }
   if (!verifyPassword(password, user.passwordHash)) return { ok: false, error: 'Wrong password.' }
   await createSession(user.id)
   revalidatePath('/')
@@ -247,7 +254,7 @@ export async function getMilestoneAction(id: string) {
   if (!milestone) return null
 
   const session = await getSession()
-  if (!session) return null
+  if (!session || session.status !== 'active') return null
 
   // Visibility rules:
   //  - draft milestones: only admin/instructor + the creator
@@ -453,7 +460,7 @@ export async function submitGuidedFormAction(input: {
   aiShareLink?: string
   clientSubmissionTimestamp?: string | Date
 }): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
-  const user = await requireUser()
+  const user = await requireActiveUser()
   const milestone = await db.milestone.findUnique({ where: { id: input.milestoneId } })
   if (!milestone) return { ok: false, error: 'Milestone not found.' }
   if (milestone.status !== 'active') return { ok: false, error: 'Milestone is not active.' }
@@ -532,7 +539,7 @@ export async function submitJsonAction(input: {
   aiShareLink?: string
   clientSubmissionTimestamp?: string | Date
 }): Promise<{ ok: true; id: string; mode?: 'json' | 'freeform' } | { ok: false; error: string }> {
-  const user = await requireUser()
+  const user = await requireActiveUser()
   const milestone = await db.milestone.findUnique({ where: { id: input.milestoneId } })
   if (!milestone) return { ok: false, error: 'Milestone not found.' }
   if (milestone.status !== 'active') return { ok: false, error: 'Milestone is not active.' }
@@ -691,7 +698,7 @@ export async function listDomainSubmissionsAction(domainId: string) {
 // -----------------------------------------------------------------------------
 
 export async function getStreakBreakdownAction() {
-  const user = await requireUser()
+  const user = await requireActiveUser()
   const activeSeason = await getActiveSeason()
   const { computeStreakBreakdown } = await import('@/lib/streaks')
   return computeStreakBreakdown(user.id, activeSeason.id)
@@ -719,7 +726,7 @@ export async function getLeaderboardAction(): Promise<LeaderboardEntry[]> {
   const weekEnd = new Date(weekStart.getTime() + 7 * 24 * 60 * 60 * 1000)
 
   const students = await db.user.findMany({
-    where: { role: 'student' },
+    where: { role: 'student', status: 'active' },
     select: {
       id: true, nickname: true, avatarId: true, role: true,
       captainOf: { include: { domain: true } },
@@ -1130,7 +1137,7 @@ export async function listAppEventsAction(limit = 10) {
 // -----------------------------------------------------------------------------
 
 export async function getStudentDashboardDataAction() {
-  const user = await requireUser()
+  const user = await requireActiveUser()
   const activeSeason = await getActiveSeason()
   const { computeStreakBreakdown, currentManilaWeekStart } = await import('@/lib/streaks')
 
@@ -1179,15 +1186,16 @@ export async function getStudentDashboardDataAction() {
 export async function getInstructorDashboardDataAction() {
   await requireRole('admin', 'instructor')
   const activeSeason = await getActiveSeason()
-  const [milestones, submissions, mocks, selections, students, events] = await Promise.all([
+  const [milestones, submissions, mocks, selections, students, events, domains] = await Promise.all([
     db.milestone.count({ where: { seasonId: activeSeason.id } }),
     db.submission.count({ where: { milestone: { seasonId: activeSeason.id } } }),
     db.proctoredMock.count({ where: { seasonId: activeSeason.id } }),
     db.teamSelection.count({ where: { seasonId: activeSeason.id } }),
     db.user.count({ where: { role: 'student' } }),
     db.appEvent.findMany({ orderBy: { createdAt: 'desc' }, take: 10 }),
+    db.domain.count(),
   ])
-  return { counts: { milestones, submissions, mocks, selections, students }, events }
+  return { counts: { milestones, submissions, mocks, selections, students, domains }, events }
 }
 
 export async function getAdminDashboardDataAction() {
@@ -1845,5 +1853,230 @@ export async function deleteSeasonAction(id: string) {
   })
   revalidatePath('/')
   return season
+}
+
+// -----------------------------------------------------------------------------
+// Registration & Approvals
+// -----------------------------------------------------------------------------
+
+export async function registerAction(input: {
+  studentId: string
+  nickname: string
+  realName: string
+  password: string
+  avatarId?: string
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  const studentId = input.studentId.trim()
+  const nickname = input.nickname.trim()
+  const realName = input.realName.trim()
+  const password = input.password
+  const avatarId = input.avatarId || 'avatar-01'
+
+  if (studentId.length < 2 || studentId.length > 20) {
+    return { ok: false, error: 'Student ID must be between 2 and 20 characters.' }
+  }
+  if (!/^[a-zA-Z0-9-]+$/.test(studentId)) {
+    return { ok: false, error: 'Student ID must be alphanumeric and can include dashes.' }
+  }
+  if (nickname.length < 2 || nickname.length > 32) {
+    return { ok: false, error: 'Nickname must be between 2 and 32 characters.' }
+  }
+  if (realName.length < 2 || realName.length > 100) {
+    return { ok: false, error: 'Real name must be between 2 and 100 characters.' }
+  }
+  if (password.length < 8) {
+    return { ok: false, error: 'Password must be at least 8 characters.' }
+  }
+  if (avatarId && !AVATAR_MAP[avatarId]) {
+    return { ok: false, error: 'Invalid avatar selection.' }
+  }
+
+  // Check unique student ID
+  const existingStudent = await db.user.findFirst({
+    where: { studentId },
+  })
+  if (existingStudent) {
+    return { ok: false, error: 'Student ID is already registered.' }
+  }
+
+  const email = `${studentId.toLowerCase()}@ito.local`
+  const existingEmail = await db.user.findUnique({
+    where: { email },
+  })
+  if (existingEmail) {
+    return { ok: false, error: 'Student ID placeholder email is already in use.' }
+  }
+
+  const newUser = await db.user.create({
+    data: {
+      email,
+      passwordHash: hashPassword(password),
+      role: 'student',
+      status: 'pending',
+      nickname,
+      realName,
+      studentId,
+      avatarId,
+    },
+  })
+
+  // Log in immediately by creating session
+  await createSession(newUser.id)
+
+  return { ok: true }
+}
+
+export async function listPendingUsersAction() {
+  await requireRole('admin')
+  return db.user.findMany({
+    where: { status: 'pending' },
+    orderBy: { createdAt: 'asc' },
+  })
+}
+
+export async function approveUserAction(userId: string): Promise<{ ok: true } | { ok: false; error: string }> {
+  await requireRole('admin')
+  const user = await db.user.findUnique({ where: { id: userId } })
+  if (!user) return { ok: false, error: 'User not found.' }
+  await db.user.update({
+    where: { id: userId },
+    data: { status: 'active' },
+  })
+  revalidatePath('/')
+  return { ok: true }
+}
+
+export async function rejectUserAction(userId: string): Promise<{ ok: true } | { ok: false; error: string }> {
+  await requireRole('admin')
+  const user = await db.user.findUnique({ where: { id: userId } })
+  if (!user) return { ok: false, error: 'User not found.' }
+  await db.user.update({
+    where: { id: userId },
+    data: { status: 'rejected' },
+  })
+  revalidatePath('/')
+  return { ok: true }
+}
+
+export async function bulkCreateUsersAction(
+  records: Array<{
+    studentId: string
+    nickname: string
+    realName?: string
+    password: string
+    role?: 'admin' | 'instructor' | 'student'
+    avatarId?: string
+  }>
+): Promise<{
+  ok: true
+  created: number
+  skipped: number
+  errors: Array<{ row: number; studentId: string; reason: string }>
+} | { ok: false; error: string }> {
+  await requireRole('admin')
+  if (!records || records.length === 0) {
+    return { ok: false, error: 'No records provided.' }
+  }
+  if (records.length > 200) {
+    return { ok: false, error: 'Maximum batch size is 200 records.' }
+  }
+
+  let created = 0
+  let skipped = 0
+  const errors: Array<{ row: number; studentId: string; reason: string }> = []
+
+  for (let i = 0; i < records.length; i++) {
+    const rec = records[i]
+    const rowNum = i + 1
+    const studentId = (rec.studentId || '').trim()
+    const nickname = (rec.nickname || '').trim()
+    const realName = (rec.realName || '').trim()
+    const password = rec.password
+    const role = rec.role ?? 'student'
+    const avatarId = rec.avatarId ?? 'avatar-01'
+
+    if (!studentId) {
+      errors.push({ row: rowNum, studentId: '', reason: 'Student ID is required.' })
+      skipped++
+      continue
+    }
+    if (studentId.length < 2 || studentId.length > 20) {
+      errors.push({ row: rowNum, studentId, reason: 'Student ID must be 2-20 characters.' })
+      skipped++
+      continue
+    }
+    if (!/^[a-zA-Z0-9-]+$/.test(studentId)) {
+      errors.push({ row: rowNum, studentId, reason: 'Student ID must be alphanumeric and can include dashes.' })
+      skipped++
+      continue
+    }
+    if (!nickname || nickname.length < 2 || nickname.length > 32) {
+      errors.push({ row: rowNum, studentId, reason: 'Nickname must be 2-32 characters.' })
+      skipped++
+      continue
+    }
+    if (realName && realName.length > 100) {
+      errors.push({ row: rowNum, studentId, reason: 'Real name max 100 characters.' })
+      skipped++
+      continue
+    }
+    if (!password || password.length < 8) {
+      errors.push({ row: rowNum, studentId, reason: 'Password must be at least 8 characters.' })
+      skipped++
+      continue
+    }
+    if (!['admin', 'instructor', 'student'].includes(role)) {
+      errors.push({ row: rowNum, studentId, reason: 'Invalid role.' })
+      skipped++
+      continue
+    }
+    if (avatarId && !AVATAR_MAP[avatarId]) {
+      errors.push({ row: rowNum, studentId, reason: 'Invalid avatarId.' })
+      skipped++
+      continue
+    }
+
+    // Check unique studentId
+    const existingStudent = await db.user.findFirst({
+      where: { studentId },
+    })
+    if (existingStudent) {
+      errors.push({ row: rowNum, studentId, reason: 'Student ID is already registered.' })
+      skipped++
+      continue
+    }
+
+    const email = `${studentId.toLowerCase()}@ito.local`
+    const existingEmail = await db.user.findUnique({
+      where: { email },
+    })
+    if (existingEmail) {
+      errors.push({ row: rowNum, studentId, reason: 'Generated email is already in use.' })
+      skipped++
+      continue
+    }
+
+    try {
+      await db.user.create({
+        data: {
+          email,
+          passwordHash: hashPassword(password),
+          role,
+          status: 'active', // Bulk created users are auto-approved
+          nickname,
+          realName: realName || null,
+          studentId,
+          avatarId,
+        },
+      })
+      created++
+    } catch (e: any) {
+      errors.push({ row: rowNum, studentId, reason: e.message || 'Database error.' })
+      skipped++
+    }
+  }
+
+  revalidatePath('/')
+  return { ok: true, created, skipped, errors }
 }
 

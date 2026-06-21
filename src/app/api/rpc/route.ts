@@ -21,6 +21,11 @@ const MAX_BODY_SIZE = 1024 * 1024
 const ALLOWED: ReadonlySet<string> = new Set([
   'loginAction',
   'logoutAction',
+  'registerAction',
+  'listPendingUsersAction',
+  'approveUserAction',
+  'rejectUserAction',
+  'bulkCreateUsersAction',
   'getCurrentUser',
   'updateProfileAction',
   'listUsersAction',

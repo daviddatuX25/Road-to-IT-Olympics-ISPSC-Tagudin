@@ -3,6 +3,7 @@
 import { useEffect, useState, useTransition } from 'react'
 import { Login } from '@/components/app/login'
 import { AppShell } from '@/components/app/app-shell'
+import { PendingShell } from '@/components/app/pending-shell'
 import { api } from '@/lib/api-client'
 import type { SessionUser } from '@/lib/auth'
 import { Loader2 } from 'lucide-react'
@@ -46,6 +47,18 @@ export default function Home() {
           } catch {
             setUser(null)
           }
+        }}
+      />
+    )
+  }
+
+  if (user.status === 'pending' || user.status === 'rejected') {
+    return (
+      <PendingShell
+        user={user}
+        onLogout={async () => {
+          await api.logoutAction()
+          setUser(null)
         }}
       />
     )

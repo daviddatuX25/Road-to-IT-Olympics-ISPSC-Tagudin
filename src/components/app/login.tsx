@@ -1,26 +1,46 @@
 'use client'
 
 import { api } from '@/lib/api-client'
-import { useState, useTransition } from 'react'
-import { Trophy, Loader2, Sparkles } from 'lucide-react'
+import { useState, useEffect, useTransition } from 'react'
+import { Trophy, Loader2, Zap, Flame, Shield } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { toast } from 'sonner'
+import { RegistrationForm } from './registration-form'
 
-// Quick sign-in is disabled. Use the seeded credentials to test the roles:
-// Admin: admin@ito.test | Instructor: instructor@ito.test | Student: lia@ito.test
+// Use the seeded credentials to test the roles:
+// Admin: ADMIN-001 | Instructor: FAC-001 | Student: 2024-001
 
 export function Login({ onLogin }: { onLogin: () => void }) {
-  const [email, setEmail] = useState('lia@ito.test')
+  const [identifier, setIdentifier] = useState('2024-001')
   const [password, setPassword] = useState('olypmics2026')
+  const [mode, setMode] = useState<'signin' | 'register'>('signin')
   const [pending, startTransition] = useTransition()
+  
+  const [activeSeasonName, setActiveSeasonName] = useState<string>('')
+  const [phases, setPhases] = useState<Array<{ label: string; shortLabel: string; sequence: number }>>([])
+
+  useEffect(() => {
+    api.getActiveSeasonAction()
+      .then((season) => {
+        if (season) {
+          setActiveSeasonName(season.name)
+          if (season.phases) {
+            setPhases(season.phases)
+          }
+        }
+      })
+      .catch((err) => {
+        console.error('Failed to load active season details:', err)
+      })
+  }, [])
 
   function submit(e: React.FormEvent) {
     e.preventDefault()
     startTransition(async () => {
-      const result = await api.loginAction(email, password)
+      const result = await api.loginAction(identifier, password)
       if (result.ok) {
         toast.success('Signed in.')
         onLogin()
@@ -31,90 +51,122 @@ export function Login({ onLogin }: { onLogin: () => void }) {
   }
 
   return (
-    <div className="min-h-screen flex items-stretch bg-background">
-      {/* Left: branding / concept */}
-      <div className="hidden lg:flex lg:w-1/2 flex-col justify-between p-12 bg-gradient-to-br from-primary/15 via-background to-background border-r">
+    <div className="min-h-screen flex flex-col lg:flex-row items-stretch bg-background">
+      {/* Left/Top: branding / concept */}
+      <div className="flex lg:w-1/2 flex-col justify-between p-8 sm:p-12 bg-gradient-to-br from-primary/15 via-background to-background border-b lg:border-b-0 lg:border-r gap-8 lg:gap-0">
         <div>
           <div className="flex items-center gap-3">
             <div className="size-11 rounded-xl bg-primary text-primary-foreground grid place-items-center shadow-sm">
               <Trophy className="size-6" />
             </div>
             <div>
-              <p className="text-xs uppercase tracking-widest text-muted-foreground">15th IT Skills Olympics · Makati · Nov 2026</p>
-              <h1 className="text-2xl font-semibold tracking-tight">Road to IT Olympics</h1>
+              <p className="text-xs uppercase tracking-widest text-muted-foreground">
+                {activeSeasonName || 'IT Skills Olympics'} · ISPSC Tagudin Campus
+              </p>
+              <h1 className="text-2xl font-semibold tracking-tight">The Forge: Selection & Training</h1>
             </div>
           </div>
 
           <div className="mt-10 space-y-5 max-w-md">
-            <h2 className="text-3xl font-semibold tracking-tight leading-tight">
-              A low-friction weekly practice habit, an AI-guided study loop, and a real proctored gate.
+            <h2 className="text-3xl font-semibold tracking-tight leading-tight bg-gradient-to-r from-primary to-violet-600 bg-clip-text text-transparent">
+              Forging Tagudin's Next Generation of Tech Champions.
             </h2>
             <p className="text-muted-foreground">
-              Six domains. Four working months. One rule the whole system is built around: practice data
-              is useful as a coaching signal but never decides who represents the school — that decision
-              happens at the proctored mock, where it can&apos;t be faked.
+              Decoupled contest tracks. Custom seasonal timeline. A single governing rule: consistent
+              practice builds the skills, while high-stakes, proctored scrimmages select our elite delegates.
             </p>
-            <ul className="space-y-2 text-sm text-muted-foreground">
-              <li className="flex gap-2"><Sparkles className="size-4 text-primary mt-0.5" /> Weekly AI-guided prompts you copy into Claude, Gemini, or ChatGPT.</li>
-              <li className="flex gap-2"><Sparkles className="size-4 text-primary mt-0.5" /> Leaderboard on streaks and completion — never on AI scores.</li>
-              <li className="flex gap-2"><Sparkles className="size-4 text-primary mt-0.5" /> Proctored mocks are the only thing that decides the team.</li>
+            <ul className="space-y-3.5 text-sm text-muted-foreground">
+              <li className="flex gap-2.5">
+                <Zap className="size-4 text-primary mt-0.5 shrink-0" />
+                <span><strong>Interactive AI-Tutor Mentorship</strong> — Paste custom milestone blueprints directly into ChatGPT, Gemini, or Claude to audit your skills.</span>
+              </li>
+              <li className="flex gap-2.5">
+                <Flame className="size-4 text-orange-500 mt-0.5 shrink-0" />
+                <span><strong>Consistency Over Metrics</strong> — The public leaderboard ranks your streak and dedication, keeping raw diagnostics private to you and your captain.</span>
+              </li>
+              <li className="flex gap-2.5">
+                <Shield className="size-4 text-emerald-500 mt-0.5 shrink-0" />
+                <span><strong>The Gate of Truth</strong> — Authentic proctored mocks run under real-world time and system restrictions determine the final delegation.</span>
+              </li>
             </ul>
           </div>
         </div>
 
-        <p className="text-xs text-muted-foreground">
-          Diagnostic week in July. Practice cycles in August. Maintenance in September. Sprint in October.
-          Taper into November.
-        </p>
+        <div className="text-xs text-muted-foreground border-t pt-4 border-primary/10">
+          <p className="font-semibold uppercase tracking-wider mb-2 text-[10px] text-primary/80">Active Training Pipeline</p>
+          <p className="leading-relaxed">
+            {phases.length > 0
+              ? phases.slice().sort((a, b) => a.sequence - b.sequence).map(p => p.shortLabel || p.label).join(' ➡️ ')
+              : 'Diagnostics ➡️ Scrimmages ➡️ Spaced Recall ➡️ Intensive Sprint ➡️ Finals'}
+          </p>
+        </div>
       </div>
 
-      {/* Right: login */}
-      <div className="flex-1 flex items-center justify-center p-6">
+      {/* Right/Bottom: login */}
+      <div className="flex-1 flex items-center justify-center p-6 sm:p-12">
         <Card className="w-full max-w-md shadow-sm">
-          <CardHeader>
-            <CardTitle className="text-xl">Sign in</CardTitle>
-            <CardDescription>
-              Use one of the seeded accounts to explore the platform. Password for all demo accounts:{' '}
-              <code className="text-foreground bg-muted px-1.5 py-0.5 rounded text-xs">olypmics2026</code>
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={submit} className="space-y-4">
-              <div className="space-y-1.5">
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="you@school.edu"
-                  autoComplete="email"
-                  required
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="password">Password</Label>
-                <Input
-                  id="password"
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  autoComplete="current-password"
-                  required
-                />
-              </div>
-              <Button type="submit" className="w-full" disabled={pending}>
-                {pending ? <Loader2 className="size-4 animate-spin mr-2" /> : null}
-                Sign in
-              </Button>
-            </form>
+          {mode === 'signin' ? (
+            <>
+              <CardHeader>
+                <CardTitle className="text-xl">Sign in</CardTitle>
+                <CardDescription>
+                  Use one of the seeded accounts to explore the platform. Password for all demo accounts:{' '}
+                  <code className="text-foreground bg-muted px-1.5 py-0.5 rounded text-xs">olypmics2026</code>
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <form onSubmit={submit} className="space-y-4">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="identifier">Username / ID Number</Label>
+                    <Input
+                      id="identifier"
+                      type="text"
+                      value={identifier}
+                      onChange={(e) => setIdentifier(e.target.value)}
+                      placeholder="e.g. 2024-001 or FAC-001"
+                      required
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="password">Password</Label>
+                    <Input
+                      id="password"
+                      type="password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      autoComplete="current-password"
+                      required
+                    />
+                  </div>
+                  <Button type="submit" className="w-full" disabled={pending}>
+                    {pending ? <Loader2 className="size-4 animate-spin mr-2" /> : null}
+                    Sign in
+                  </Button>
+                </form>
 
-            <div className="mt-6 pt-6 border-t text-center">
-              <p className="text-xs text-muted-foreground">
-                Enter your registered credentials to sign in.
-              </p>
-            </div>
-          </CardContent>
+                <div className="mt-6 pt-6 border-t text-center flex flex-col gap-2">
+                  <p className="text-xs text-muted-foreground">
+                    Don't have an account yet?
+                  </p>
+                  <Button variant="outline" size="sm" onClick={() => setMode('register')}>
+                    Register student account
+                  </Button>
+                </div>
+              </CardContent>
+            </>
+          ) : (
+            <>
+              <CardHeader>
+                <CardTitle className="text-xl">Student Registration</CardTitle>
+                <CardDescription>
+                  Apply to join the training program. All applications require administrator approval.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <RegistrationForm onBackToLogin={() => setMode('signin')} onLogin={onLogin} />
+              </CardContent>
+            </>
+          )}
         </Card>
       </div>
     </div>
