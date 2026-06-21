@@ -16,10 +16,34 @@ services:
       - SESSION_SECRET=dev-only-change-me-in-prod-32chars-min!!
       # Use the persistent DB from the mounted volume (NOT the read-only baked one).
       - DATABASE_URL=file:/app/db/custom.db
+      # Discord webhook URL — generate in: Server Settings → Integrations → Webhooks
+      # Never hardcode the real token here; use a .env file or secrets manager.
+      - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL:-}
+      # Public app URL used in "Open the app" buttons in Discord embeds.
+      - APP_PUBLIC_URL=${APP_PUBLIC_URL:-http://localhost:3000}
     volumes:
       # Persistent DB so data survives image rebuilds.
       - rio-db:/app/db
     restart: unless-stopped
+
+  # ── Optional: standalone uptime monitor ──────────────────────────────────────
+  # Polls /api/health every 60s from outside the app process.
+  # Sends Discord alerts on downtime / recovery.
+  # To enable: uncomment the block below, then set DISCORD_WEBHOOK_URL.
+  #
+  # uptime-monitor:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile
+  #   container_name: rio-uptime
+  #   command: ["bun", "run", "scripts/uptime-monitor.ts"]
+  #   environment:
+  #     - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL:-}
+  #     - HEALTH_CHECK_URL=http://rio:3000/api/health
+  #     - POLL_INTERVAL_MS=60000
+  #   depends_on:
+  #     - rio
+  #   restart: unless-stopped
 
 volumes:
   rio-db:

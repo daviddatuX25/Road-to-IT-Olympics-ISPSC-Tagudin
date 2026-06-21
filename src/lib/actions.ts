@@ -7,6 +7,7 @@ import {
   verifyPassword, hashPassword,
 } from '@/lib/auth'
 import { AVATAR_MAP } from '@/lib/avatars'
+import { sendDiscordAlert } from '@/lib/discord'
 
 // Helper to query active season
 async function getActiveSeason() {
@@ -347,6 +348,20 @@ export async function createMilestoneAction(input: {
     },
   })
   revalidatePath('/')
+
+  // Notify Discord if published immediately as active
+  if (input.status === 'active') {
+    const domain = await db.domain.findUnique({ where: { id: input.domainId } })
+    void sendDiscordAlert('milestone-published', {
+      milestoneTitle: input.title,
+      milestoneDomain: domain?.name ?? input.domainId,
+      milestoneMode: input.mode,
+      milestoneDifficulty: input.difficulty,
+      milestonePhase: input.weekOrPhase,
+      createdBy: user.nickname,
+    })
+  }
+
   return { ok: true, id: milestone.id }
 }
 
@@ -444,6 +459,18 @@ export async function activateMilestoneAction(id: string): Promise<{ ok: true } 
 
   await db.milestone.update({ where: { id }, data: { status: 'active' } })
   revalidatePath('/')
+
+  // Notify Discord — milestone is now live for submissions
+  const domain = await db.domain.findUnique({ where: { id: m.domainId } })
+  void sendDiscordAlert('milestone-activated', {
+    milestoneTitle: m.title,
+    milestoneDomain: domain?.name ?? m.domainId,
+    milestoneMode: m.mode,
+    milestoneDifficulty: m.difficulty,
+    milestonePhase: m.weekOrPhase,
+    createdBy: user.nickname,
+  })
+
   return { ok: true }
 }
 
@@ -530,6 +557,10 @@ export async function submitGuidedFormAction(input: {
   await db.milestone.update({ where: { id: milestone.id }, data: { isLocked: true } })
 
   revalidatePath('/')
+
+  // Fire leaderboard notification (debounced — max once per 5 min)
+  void notifyLeaderboardUpdate()
+
   return { ok: true, id: sub.id }
 }
 
@@ -639,6 +670,10 @@ export async function submitJsonAction(input: {
 
   await db.milestone.update({ where: { id: milestone.id }, data: { isLocked: true } })
   revalidatePath('/')
+
+  // Fire leaderboard notification (debounced — max once per 5 min)
+  void notifyLeaderboardUpdate()
+
   return { ok: true, id: sub.id, mode: inputType }
 }
 
@@ -2080,3 +2115,49 @@ export async function bulkCreateUsersAction(
   return { ok: true, created, skipped, errors }
 }
 
+// ── Discord notification helpers ──────────────────────────────────────────────
+// These are fire-and-forget. They MUST NOT throw or interfere with the
+// calling action's return value.
+
+let _lastLeaderboardNotifiedAt = 0
+const LEADERBOARD_NOTIFY_DEBOUNCE_MS = 5 * 60 * 1000  // 5 minutes
+
+async function _computeLeaderboardTop3(): Promise<Array<{ rank: number; nickname: string; bestStreak: number; weeksCompleted: number }>> {
+  // Direct DB computation — avoids calling getLeaderboardAction() which
+  // needs an HTTP request context for getSession() / cookies().
+  const { computeStreakBreakdown, manilaWeekKey } = await import('@/lib/streaks')
+
+  const activeSeason = await getActiveSeason()
+  const students = await db.user.findMany({
+    where: { role: 'student', status: 'active' },
+    select: { id: true, nickname: true },
+  })
+
+  const entries: Array<{ nickname: string; bestStreak: number; weeksCompleted: number }> = []
+  for (const s of students) {
+    const breakdown = await computeStreakBreakdown(s.id, activeSeason.id)
+    const bestStreak = Math.max(0, ...breakdown.map((b: { streak: number }) => b.streak))
+    const subs = await db.submission.findMany({
+      where: { userId: s.id, milestone: { seasonId: activeSeason.id } },
+      select: { clientSubmissionTimestamp: true },
+    })
+    const weekKeys = new Set(subs.map((sub: { clientSubmissionTimestamp: Date }) => manilaWeekKey(sub.clientSubmissionTimestamp.getTime())))
+    entries.push({ nickname: s.nickname, bestStreak, weeksCompleted: weekKeys.size })
+  }
+
+  entries.sort((a, b) => b.bestStreak - a.bestStreak || b.weeksCompleted - a.weeksCompleted)
+  return entries.slice(0, 3).map((e, i) => ({ rank: i + 1, ...e }))
+}
+
+async function notifyLeaderboardUpdate() {
+  const now = Date.now()
+  if (now - _lastLeaderboardNotifiedAt < LEADERBOARD_NOTIFY_DEBOUNCE_MS) return
+  _lastLeaderboardNotifiedAt = now
+
+  try {
+    const top3 = await _computeLeaderboardTop3()
+    await sendDiscordAlert('leaderboard', { top3 })
+  } catch (err) {
+    console.error('[discord] notifyLeaderboardUpdate failed:', err)
+  }
+}
