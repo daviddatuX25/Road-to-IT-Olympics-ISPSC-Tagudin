@@ -39,9 +39,13 @@ type AppState = {
   domains: Domain[]
   phases: SeasonPhase[]
   activeSeasonId: string | null
+  paceMode: 'synchronous' | 'asynchronous'
+  currentPhaseKey: string | null
   setDomains: (domains: Domain[]) => void
   setPhases: (phases: SeasonPhase[]) => void
   setActiveSeasonId: (id: string | null) => void
+  setPaceMode: (mode: 'synchronous' | 'asynchronous') => void
+  setCurrentPhaseKey: (key: string | null) => void
   getDomainByKey: (key: string) => Domain | undefined
   getPhaseByKey: (key: string) => SeasonPhase | undefined
 
@@ -68,9 +72,13 @@ export const useApp = create<AppState>((set, get) => ({
   domains: [],
   phases: [],
   activeSeasonId: null,
+  paceMode: 'asynchronous',
+  currentPhaseKey: null,
   setDomains: (domains) => set({ domains }),
   setPhases: (phases) => set({ phases }),
   setActiveSeasonId: (id) => set({ activeSeasonId: id }),
+  setPaceMode: (mode) => set({ paceMode: mode }),
+  setCurrentPhaseKey: (key) => set({ currentPhaseKey: key }),
   getDomainByKey: (key) => get().domains.find((d) => d.key === key),
   getPhaseByKey: (key) => get().phases.find((p) => p.key === key),
 

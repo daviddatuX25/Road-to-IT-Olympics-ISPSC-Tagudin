@@ -71,7 +71,7 @@ export type SessionUser = {
   id: string
   email: string
   role: 'admin' | 'instructor' | 'student'
-  status: 'pending' | 'active' | 'rejected'
+  status: 'pending' | 'active' | 'rejected' | 'suspended' | 'archived'
   nickname: string
   realName: string | null
   studentId: string | null

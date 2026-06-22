@@ -57,6 +57,8 @@ export function SeasonsAdmin() {
   const [endDate, setEndDate] = useState('2026-11-30')
   const [status, setStatus] = useState('inactive')
   const [phases, setPhases] = useState<PhaseInput[]>([])
+  const [paceMode, setPaceModeLocal] = useState<'synchronous' | 'asynchronous'>('asynchronous')
+  const [currentPhaseKey, setCurrentPhaseKeyLocal] = useState<string | null>(null)
 
   async function load() {
     try {
@@ -113,6 +115,8 @@ export function SeasonsAdmin() {
           startDate: new Date(startDate).toISOString(),
           endDate: new Date(endDate).toISOString(),
           status,
+          paceMode,
+          currentPhaseKey,
           phases: phases.map(p => ({
             key: p.key.trim().toLowerCase(),
             label: p.label.trim(),
@@ -130,6 +134,8 @@ export function SeasonsAdmin() {
         setEndDate('2026-11-30')
         setStatus('inactive')
         setPhases([])
+        setPaceModeLocal('asynchronous')
+        setCurrentPhaseKeyLocal(null)
         await load()
         bump()
         // Reload page to bootstrap active season update
@@ -156,6 +162,8 @@ export function SeasonsAdmin() {
         isMockHeavy: p.isMockHeavy,
         sequence: p.sequence,
       })).sort((a: any, b: any) => a.sequence - b.sequence) || [])
+      setPaceModeLocal((editOpen as any).paceMode ?? 'asynchronous')
+      setCurrentPhaseKeyLocal((editOpen as any).currentPhaseKey ?? null)
     }
   }, [editOpen])
 
@@ -169,6 +177,8 @@ export function SeasonsAdmin() {
           startDate: new Date(startDate).toISOString(),
           endDate: new Date(endDate).toISOString(),
           status,
+          paceMode,
+          currentPhaseKey,
           phases: phases.map(p => ({
             id: p.id,
             key: p.key.trim().toLowerCase(),
@@ -316,6 +326,43 @@ export function SeasonsAdmin() {
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
+                <Label className="text-xs font-semibold">Pace Mode</Label>
+                <Select value={paceMode} onValueChange={v => setPaceModeLocal(v as 'synchronous' | 'asynchronous')}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="asynchronous">Asynchronous — all active milestones visible</SelectItem>
+                    <SelectItem value="synchronous">Synchronous — gated by current phase</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              {paceMode === 'synchronous' ? (
+                <div className="space-y-2">
+                  <Label className="text-xs font-semibold">Current Phase</Label>
+                  <Select
+                    value={currentPhaseKey ?? '__none__'}
+                    onValueChange={v => setCurrentPhaseKeyLocal(v === '__none__' ? null : v)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">— Not started (no milestones unlocked) —</SelectItem>
+                      {[...phases].sort((a, b) => a.sequence - b.sequence).map(p => (
+                        <SelectItem key={p.key} value={p.key}>{p.label || p.key}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              ) : (
+                <div className="space-y-2 invisible" />
+              )}
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
                 <Label htmlFor="c-start" className="text-xs font-semibold">Start Date</Label>
                 <Input id="c-start" type="date" value={startDate} onChange={e => setStartDate(e.target.value)} />
               </div>
@@ -436,6 +483,43 @@ export function SeasonsAdmin() {
                   </SelectContent>
                 </Select>
               </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label className="text-xs font-semibold">Pace Mode</Label>
+                <Select value={paceMode} onValueChange={v => setPaceModeLocal(v as 'synchronous' | 'asynchronous')}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="asynchronous">Asynchronous — all active milestones visible</SelectItem>
+                    <SelectItem value="synchronous">Synchronous — gated by current phase</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              {paceMode === 'synchronous' ? (
+                <div className="space-y-2">
+                  <Label className="text-xs font-semibold">Current Phase</Label>
+                  <Select
+                    value={currentPhaseKey ?? '__none__'}
+                    onValueChange={v => setCurrentPhaseKeyLocal(v === '__none__' ? null : v)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">— Not started (no milestones unlocked) —</SelectItem>
+                      {[...phases].sort((a, b) => a.sequence - b.sequence).map(p => (
+                        <SelectItem key={p.key} value={p.key}>{p.label || p.key}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              ) : (
+                <div className="space-y-2 invisible" />
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-4">

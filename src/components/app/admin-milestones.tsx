@@ -5,7 +5,7 @@ import { MilestoneWithMeta } from '@/lib/api-client'
 import { useEffect, useState, useTransition } from 'react'
 import {
   Loader2, Plus, Save, FileText, Lock, Archive, History, Edit3, X,
-  ArrowLeft, Copy,
+  ArrowLeft, Copy, CalendarClock,
 } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -25,10 +25,38 @@ import type { SessionUser } from '@/lib/auth'
 import { cn } from '@/lib/utils'
 
 export function AdminMilestones({ user }: { user: SessionUser }) {
-  const { selectMilestone, domains } = useApp()
+  const { selectMilestone, domains, phases, paceMode, currentPhaseKey, activeSeasonId, setCurrentPhaseKey: storeSetCurrentPhaseKey } = useApp()
   const [milestones, setMilestones] = useState<MilestoneWithMeta[] | null>(null)
   const [editorOpen, setEditorOpen] = useState<null | { mode: 'create' } | { mode: 'version'; milestone: MilestoneWithMeta } | { mode: 'edit'; milestone: MilestoneWithMeta }>(null)
   const [versionView, setVersionView] = useState<MilestoneWithMeta | null>(null)
+  const [advancePending, startAdvanceTransition] = useTransition()
+
+  const sortedPhases = [...phases].sort((a, b) => a.sequence - b.sequence)
+  const currentIdx = sortedPhases.findIndex(p => p.key === currentPhaseKey)
+  const currentPhaseLabel = currentIdx >= 0 ? sortedPhases[currentIdx]?.label : null
+  const nextPhase = sortedPhases[currentIdx + 1] ?? null
+  const prevPhase = currentIdx > 0 ? sortedPhases[currentIdx - 1] : null
+  const isLastPhase = currentIdx === sortedPhases.length - 1 && currentIdx >= 0
+
+  async function advancePhase(newKey: string | null) {
+    if (!activeSeasonId) return
+    startAdvanceTransition(async () => {
+      try {
+        const r = await api.updateSeasonAction(activeSeasonId, { currentPhaseKey: newKey })
+        if (r) {
+          storeSetCurrentPhaseKey(newKey)
+          toast.success(newKey
+            ? `Phase advanced to: ${sortedPhases.find(p => p.key === newKey)?.label ?? newKey}`
+            : 'Phase reset — season marked as not started.'
+          )
+        } else {
+          toast.error('Failed to update phase.')
+        }
+      } catch (err: any) {
+        toast.error('Failed to update phase: ' + err.message)
+      }
+    })
+  }
 
   async function load() {
     // Show all milestones (draft + active + archived) for staff/captains
@@ -52,6 +80,57 @@ export function AdminMilestones({ user }: { user: SessionUser }) {
 
   return (
     <div className="space-y-4">
+      {paceMode === 'synchronous' && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <CalendarClock className="size-4 text-muted-foreground" />
+              Season Pacing — Synchronous
+            </CardTitle>
+            <CardDescription className="text-xs">
+              Students can only see milestones up to and including the current phase.
+              Advance manually when the training calendar moves on.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center gap-3 flex-wrap">
+              <div className="flex-1">
+                <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Current Phase</p>
+                <p className="text-sm font-medium">
+                  {currentPhaseLabel ?? <span className="text-muted-foreground italic">Not started — no milestones unlocked</span>}
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={advancePending || currentIdx <= -1 || currentPhaseKey === null}
+                  onClick={() => {
+                    const target = currentIdx === 0 ? null : prevPhase?.key ?? null
+                    advancePhase(target)
+                  }}
+                >
+                  ← Previous
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={advancePending || isLastPhase || (currentPhaseKey === null && sortedPhases.length === 0)}
+                  onClick={() => {
+                    const target = currentPhaseKey === null
+                      ? sortedPhases[0]?.key
+                      : nextPhase?.key ?? null
+                    advancePhase(target)
+                  }}
+                >
+                  {currentPhaseKey === null ? 'Start Season →' : 'Next Phase →'}
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0">
           <div>

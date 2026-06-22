@@ -5,7 +5,7 @@ import { MilestoneWithMeta } from '@/lib/api-client'
 import { useEffect, useState, useTransition, useMemo, createElement } from 'react'
 import {
   Loader2, ArrowLeft, Copy, Check, Filter, Plus, Lock, Archive,
-  FileText, Sparkles, ClipboardList, Code2, X, Save, Gamepad2, List, Compass,
+  FileText, Sparkles, ClipboardList, Code2, X, Save, Gamepad2, List, Compass, CalendarClock,
 } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -28,10 +28,14 @@ import { cn } from '@/lib/utils'
 export function MilestonesView({ user }: { user: SessionUser }) {
   const {
     milestoneFilterDomain, milestoneFilterWeek, selectedMilestoneId,
-    setMilestoneFilter, selectMilestone, domains, phases,
+    setMilestoneFilter, selectMilestone, domains, phases, paceMode, currentPhaseKey,
   } = useApp()
 
   const [milestones, setMilestones] = useState<MilestoneWithMeta[] | null>(null)
+  const isSynchronous = paceMode === 'synchronous'
+  const currentPhaseLabel = isSynchronous && currentPhaseKey
+    ? phases.find(p => p.key === currentPhaseKey)?.label ?? currentPhaseKey
+    : null
   const [completedIds, setCompletedIds] = useState<Set<string>>(new Set())
   const [viewMode, setViewMode] = useState<'path' | 'list'>('path')
 
@@ -138,12 +142,26 @@ export function MilestonesView({ user }: { user: SessionUser }) {
                 ...domains.map(d => ({ value: d.id, label: d.name })),
               ]}
             />
-            <FilterSelect label="Phase / week" value={weekFilter} onChange={setWeekFilter}
-              options={[{ value: 'all', label: 'All phases' }, ...phases.map(p => ({ value: p.key, label: p.label }))]}
-            />
+            {!isSynchronous ? (
+              <FilterSelect label="Phase / week" value={weekFilter} onChange={setWeekFilter}
+                options={[{ value: 'all', label: 'All phases' }, ...phases.map(p => ({ value: p.key, label: p.label }))]}
+              />
+            ) : (
+              <div className="hidden sm:block" />
+            )}
             <FilterSelect label="Mode" value={modeFilter} onChange={setModeFilter}
               options={[{ value: 'all', label: 'All modes' }, ...MODES.map(m => ({ value: m.key, label: m.label }))]}
             />
+            {isSynchronous && (
+              <div className="col-span-full flex items-center gap-2 px-3 py-2 rounded-md border bg-muted/40 text-sm mt-1">
+                <CalendarClock className="size-4 text-muted-foreground shrink-0" />
+                {currentPhaseLabel ? (
+                  <span>Current phase: <strong>{currentPhaseLabel}</strong> — all earlier phases are also accessible.</span>
+                ) : (
+                  <span className="text-muted-foreground">The season hasn&apos;t started yet. Check back soon!</span>
+                )}
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -151,7 +169,19 @@ export function MilestonesView({ user }: { user: SessionUser }) {
       {milestones === null ? (
         <div className="flex justify-center py-12"><Loader2 className="size-6 animate-spin text-muted-foreground" /></div>
       ) : milestones.length === 0 ? (
-        <Card><CardContent className="py-12 text-center text-sm text-muted-foreground">No milestones match these filters.</CardContent></Card>
+        isSynchronous && !currentPhaseKey ? (
+          <Card>
+            <CardContent className="py-12 text-center text-sm text-muted-foreground">
+              The season hasn&apos;t kicked off yet — milestones will be unlocked one phase at a time.
+            </CardContent>
+          </Card>
+        ) : (
+          <Card>
+            <CardContent className="py-12 text-center text-sm text-muted-foreground">
+              No milestones match these filters.
+            </CardContent>
+          </Card>
+        )
       ) : viewMode === 'path' ? (
         <MilestonePathView
           milestones={milestones}

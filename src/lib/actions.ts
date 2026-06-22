@@ -429,14 +429,56 @@ export async function listMilestoneMetaAction(filters?: {
   const activeSeason = await getActiveSeason()
   const targetSeasonId = filters?.seasonId ?? activeSeason.id
 
+  // Fetch the TARGET season (may differ from activeSeason) with its phases
+  // for correct paceMode/currentPhaseKey computation
+  const targetSeason = await db.season.findUnique({
+    where: { id: targetSeasonId },
+    include: { phases: { orderBy: { sequence: 'asc' } } },
+  })
+  if (!targetSeason) return []
+
   const where: any = { seasonId: targetSeasonId }
   if (filters?.domainId) where.domainId = filters.domainId
   if (filters?.status) where.status = filters.status
   if (filters?.mode) where.mode = filters.mode
+  // Note: weekOrPhase filter is intentionally applied BEFORE the gate
+  // The gate will overwrite it for sync seasons — see note below
   if (filters?.weekOrPhase) where.weekOrPhase = filters.weekOrPhase
 
   const session = await getSession()
-  // For students, only show active or archived (no draft), EXCEPT for domains they captain.
+
+  // ── PHASE GATE ──────────────────────────────────────────────────────────────
+  // Only applies when: paceMode === 'synchronous' AND session is a student.
+  // Staff/admin/instructor always see all milestones regardless of paceMode.
+  const isSynchronous = targetSeason.paceMode === 'synchronous'
+  const isStudent = session?.role === 'student'
+
+  if (isSynchronous && isStudent) {
+    const { currentPhaseKey, phases } = targetSeason
+
+    if (!currentPhaseKey || phases.length === 0) {
+      // Season not started — no milestones visible yet
+      return []
+    }
+
+    const currentPhase = phases.find(p => p.key === currentPhaseKey)
+    if (!currentPhase) {
+      // currentPhaseKey is set but doesn't exist in this season's phases
+      // Fail safe: return nothing rather than exposing everything
+      return []
+    }
+
+    // All phases with sequence <= currentPhase.sequence are unlocked
+    const unlockedPhaseKeys = phases
+      .filter(p => p.sequence <= currentPhase.sequence)
+      .map(p => p.key)
+
+    // Overwrite any manual weekOrPhase filter — the gate takes priority
+    where.weekOrPhase = { in: unlockedPhaseKeys }
+  }
+  // ── END PHASE GATE ──────────────────────────────────────────────────────────
+
+  // Draft visibility gate (existing logic — unchanged)
   if (session?.role === 'student') {
     const captainedDomainIds = session.captainOf?.map(c => c.domainId) || []
     if (captainedDomainIds.length > 0) {
@@ -1991,6 +2033,8 @@ export async function createSeasonAction(data: {
   startDate: string
   endDate: string
   status?: string
+  paceMode?: 'synchronous' | 'asynchronous'
+  currentPhaseKey?: string | null
   phases?: Array<{
     key: string
     label: string
@@ -2016,6 +2060,8 @@ export async function createSeasonAction(data: {
       startDate: new Date(data.startDate),
       endDate: new Date(data.endDate),
       status: data.status || 'inactive',
+      paceMode: data.paceMode ?? 'asynchronous',
+      currentPhaseKey: data.currentPhaseKey ?? null,
     },
   })
 
@@ -2047,6 +2093,8 @@ export async function updateSeasonAction(
     startDate?: string
     endDate?: string
     status?: string
+    paceMode?: 'synchronous' | 'asynchronous'
+    currentPhaseKey?: string | null
     phases?: Array<{
       id?: string
       key: string
@@ -2075,6 +2123,8 @@ export async function updateSeasonAction(
       ...(data.startDate ? { startDate: new Date(data.startDate) } : {}),
       ...(data.endDate ? { endDate: new Date(data.endDate) } : {}),
       ...(data.status ? { status: data.status } : {}),
+      ...('paceMode' in data && data.paceMode ? { paceMode: data.paceMode } : {}),
+      ...('currentPhaseKey' in data ? { currentPhaseKey: data.currentPhaseKey } : {}),
     },
   })
 

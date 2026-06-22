@@ -64,7 +64,7 @@ export function AppShell({ user, onLogout }: { user: SessionUser; onLogout: () =
   useSync()
 
   const { view, setView } = useApp()
-  const { setDomains, setPhases, setActiveSeasonId } = useApp()
+  const { setDomains, setPhases, setActiveSeasonId, setPaceMode, setCurrentPhaseKey } = useApp()
   const { isOnline, pendingCount, syncStatus } = useOfflineStore()
   const [mobileOpen, setMobileOpen] = useState(false)
   const [loggingOut, setLoggingOut] = useState(false)
@@ -99,6 +99,8 @@ export function AppShell({ user, onLogout }: { user: SessionUser; onLogout: () =
           setActiveSeasonId(activeSeason.id)
           setPhases(activeSeason.phases || [])
           setActiveSeasonName(activeSeason.name)
+          setPaceMode((activeSeason.paceMode ?? 'asynchronous') as 'synchronous' | 'asynchronous')
+          setCurrentPhaseKey(activeSeason.currentPhaseKey ?? null)
         }
         setDomains(domains)
       } catch (err) {
@@ -106,7 +108,7 @@ export function AppShell({ user, onLogout }: { user: SessionUser; onLogout: () =
       }
     }
     bootstrap()
-  }, [setDomains, setPhases, setActiveSeasonId, isOnline])
+  }, [setDomains, setPhases, setActiveSeasonId, setPaceMode, setCurrentPhaseKey, isOnline])
 
   const handleLogout = async () => {
     if (pendingCount > 0) {

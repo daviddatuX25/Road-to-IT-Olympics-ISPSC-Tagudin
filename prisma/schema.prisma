@@ -206,18 +206,20 @@ model SystemPromptTemplate {
 }
 
 model Season {
-  id        String    @id @default(cuid())
-  name      String    @unique
-  startDate DateTime
-  endDate   DateTime
-  status    String    @default("active")
-  createdAt DateTime  @default(now())
+  id              String            @id @default(cuid())
+  name            String            @unique
+  startDate       DateTime
+  endDate         DateTime
+  status          String            @default("active")
+  paceMode        String            @default("asynchronous")  // 'synchronous' | 'asynchronous'
+  currentPhaseKey String?           // null = season not started; set to a phase key to unlock up to that phase
+  createdAt       DateTime          @default(now())
 
-  phases           SeasonPhase[]
-  milestones       Milestone[]
-  proctoredMocks   ProctoredMock[]
-  teamSelections   TeamSelection[]
-  weeklySpotlights WeeklySpotlight[]
+  phases               SeasonPhase[]
+  milestones           Milestone[]
+  proctoredMocks       ProctoredMock[]
+  teamSelections       TeamSelection[]
+  weeklySpotlights     WeeklySpotlight[]
   candidateEvaluations CandidateEvaluation[]
 }
 
