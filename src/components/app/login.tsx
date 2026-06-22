@@ -21,7 +21,7 @@ export function Login({ onLogin }: { onLogin: () => void }) {
 
     const id = identifier.trim()
     if (!id) {
-      toast.error('Please enter your ID or username.')
+      toast.error('Please enter your Email or Student ID.')
       return
     }
     if (!password) {
@@ -63,13 +63,13 @@ export function Login({ onLogin }: { onLogin: () => void }) {
           <CardContent className="px-0 pb-0">
             <form onSubmit={submit} className="space-y-4">
               <div className="space-y-1.5">
-                <Label htmlFor="identifier">Username / ID Number</Label>
+                <Label htmlFor="identifier">Email / Student ID</Label>
                 <Input
                   id="identifier"
                   type="text"
                   value={identifier}
                   onChange={(e) => setIdentifier(e.target.value)}
-                  placeholder="e.g. E23-00345, 2024-001, FAC-001"
+                  placeholder="e.g. 2024-001, email@ispsc.edu.ph, FAC-001"
                   required
                 />
               </div>

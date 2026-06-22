@@ -45,7 +45,7 @@ export async function getActiveSeasonAction() {
 
 export async function loginAction(identifier: string, password: string): Promise<{ ok: true } | { ok: false; error: string }> {
   const idStr = identifier.trim()
-  if (!idStr || !password) return { ok: false, error: 'Username / ID and password required.' }
+  if (!idStr || !password) return { ok: false, error: 'Email / Student ID and password required.' }
 
   const user = await db.user.findFirst({
     where: {
@@ -58,7 +58,7 @@ export async function loginAction(identifier: string, password: string): Promise
     }
   })
 
-  if (!user) return { ok: false, error: 'No account found with that Username / ID.' }
+  if (!user) return { ok: false, error: 'No account found with that Email / Student ID.' }
   if (!verifyPassword(password, user.passwordHash)) return { ok: false, error: 'Wrong password.' }
   await createSession(user.id)
   revalidatePath('/')
@@ -74,7 +74,7 @@ const resetCooldown = new Map<string, number>()
 
 export async function requestPasswordResetAction(identifier: string): Promise<{ ok: true } | { ok: false; error: string }> {
   const idStr = identifier.trim()
-  if (!idStr) return { ok: false, error: 'Identifier (Username, Student ID, or Email) is required.' }
+  if (!idStr) return { ok: false, error: 'Identifier (Email or Student ID) is required.' }
 
   const now = Date.now()
   const cooldownKey = idStr.toLowerCase()

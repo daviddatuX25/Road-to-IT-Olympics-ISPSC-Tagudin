@@ -18,7 +18,7 @@ export default function ForgotPasswordPage() {
     e.preventDefault()
     const trimmed = identifier.trim()
     if (!trimmed) {
-      toast.error('Please enter your ID, Username, or Email.')
+      toast.error('Please enter your Email or Student ID.')
       return
     }
 
@@ -50,13 +50,13 @@ export default function ForgotPasswordPage() {
             <CardHeader>
               <CardTitle className="text-xl font-bold tracking-tight">Forgot Password</CardTitle>
               <CardDescription>
-                Enter your Username, Student ID, or Email. If you have a configured recovery email, we will send you a reset link.
+                Enter your Email or Student ID. If you have a configured recovery email, we will send you a reset link.
               </CardDescription>
             </CardHeader>
             <CardContent>
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="space-y-1.5">
-                  <Label htmlFor="identifier">Username / ID / Email</Label>
+                  <Label htmlFor="identifier">Email / Student ID</Label>
                   <Input
                     id="identifier"
                     type="text"
