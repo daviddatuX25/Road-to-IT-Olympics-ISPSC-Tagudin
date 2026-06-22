@@ -19,6 +19,7 @@ export function RegistrationForm({
   const [studentId, setStudentId] = useState('')
   const [nickname, setNickname] = useState('')
   const [realName, setRealName] = useState('')
+  const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [avatarId, setAvatarId] = useState('avatar-01')
@@ -52,6 +53,7 @@ export function RegistrationForm({
     const sId = studentId.trim()
     const nick = nickname.trim()
     const real = realName.trim()
+    const mail = email.trim()
 
     if (sId.length < 2 || sId.length > 20) {
       toast.error('Student ID must be between 2 and 20 characters.')
@@ -69,6 +71,10 @@ export function RegistrationForm({
       toast.error('Real name must be between 2 and 100 characters.')
       return
     }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(mail)) {
+      toast.error('Please enter a valid email address.')
+      return
+    }
     if (password.length < 8) {
       toast.error('Password must be at least 8 characters.')
       return
@@ -84,6 +90,7 @@ export function RegistrationForm({
       studentId: sId,
       nickname: nick,
       realName: real,
+      email: mail,
       password,
       avatarId,
     })
@@ -166,6 +173,21 @@ export function RegistrationForm({
           placeholder="e.g. John Doe"
           required
         />
+      </div>
+
+      <div className="space-y-1.5">
+        <Label htmlFor="reg-email">Email Address</Label>
+        <Input
+          id="reg-email"
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="e.g. john.doe@school.edu"
+          required
+        />
+        <p className="text-[11px] text-muted-foreground">
+          For account recovery and notifications.
+        </p>
       </div>
 
       <div className="grid grid-cols-2 gap-4">

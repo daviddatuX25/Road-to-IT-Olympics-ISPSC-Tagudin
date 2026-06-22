@@ -688,7 +688,7 @@ function CreateUserDialog({ open, onOpenChange, onSaved }: {
   function submit() {
     startTransition(async () => {
       const r = await api.createUserAction({
-        email, password, role, nickname, realName: realName || undefined,
+        email: email.trim() || undefined, password, role, nickname, realName: realName || undefined,
         studentId: studentId || undefined, avatarId,
       })
       if (r.ok) {
@@ -711,8 +711,8 @@ function CreateUserDialog({ open, onOpenChange, onSaved }: {
         <div className="space-y-3">
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
-              <Label htmlFor="email">Email</Label>
-              <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@school.edu" />
+              <Label htmlFor="email">Email (Optional)</Label>
+              <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="e.g. name@school.edu" />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="password">Initial password</Label>

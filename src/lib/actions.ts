@@ -228,7 +228,7 @@ export async function listUsersAction() {
 }
 
 export async function createUserAction(input: {
-  email: string
+  email?: string
   password: string
   role: 'admin' | 'instructor' | 'student'
   nickname: string
@@ -237,13 +237,22 @@ export async function createUserAction(input: {
   avatarId?: string
 }): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
   await requireRole('admin')
-  const email = input.email.toLowerCase().trim()
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    return { ok: false, error: 'Invalid email format.' }
+  
+  let email = input.email?.toLowerCase().trim() || ''
+  if (email) {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return { ok: false, error: 'Invalid email format.' }
+    }
+    if (await db.user.findUnique({ where: { email } })) {
+      return { ok: false, error: 'Email already in use.' }
+    }
+  } else {
+    // Generate unique placeholder email
+    const cleanNick = input.nickname.toLowerCase().replace(/[^a-z0-9]/g, '') || 'user'
+    const rand = Math.random().toString(36).substring(2, 8)
+    email = `${cleanNick}-${rand}@ito.local`
   }
-  if (await db.user.findUnique({ where: { email } })) {
-    return { ok: false, error: 'Email already in use.' }
-  }
+
   if (input.password.length < 8) return { ok: false, error: 'Password must be at least 8 characters.' }
   if (input.nickname.trim().length < 2) return { ok: false, error: 'Nickname must be at least 2 characters.' }
   if (!['admin', 'instructor', 'student'].includes(input.role)) return { ok: false, error: 'Invalid role.' }
@@ -2170,12 +2179,14 @@ export async function registerAction(input: {
   studentId: string
   nickname: string
   realName: string
+  email: string
   password: string
   avatarId?: string
 }): Promise<{ ok: true } | { ok: false; error: string }> {
   const studentId = input.studentId.trim()
   const nickname = input.nickname.trim()
   const realName = input.realName.trim()
+  const email = input.email.toLowerCase().trim()
   const password = input.password
   const avatarId = input.avatarId || 'avatar-01'
 
@@ -2190,6 +2201,9 @@ export async function registerAction(input: {
   }
   if (realName.length < 2 || realName.length > 100) {
     return { ok: false, error: 'Real name must be between 2 and 100 characters.' }
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return { ok: false, error: 'Invalid email format.' }
   }
   if (password.length < 8) {
     return { ok: false, error: 'Password must be at least 8 characters.' }
@@ -2206,12 +2220,12 @@ export async function registerAction(input: {
     return { ok: false, error: 'Student ID is already registered.' }
   }
 
-  const email = `${studentId.toLowerCase()}@ito.local`
+  // Check unique email
   const existingEmail = await db.user.findUnique({
     where: { email },
   })
   if (existingEmail) {
-    return { ok: false, error: 'Student ID placeholder email is already in use.' }
+    return { ok: false, error: 'Email is already in use.' }
   }
 
   const newUser = await db.user.create({
