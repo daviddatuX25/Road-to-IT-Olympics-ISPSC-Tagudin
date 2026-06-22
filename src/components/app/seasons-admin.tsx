@@ -244,7 +244,7 @@ export function SeasonsAdmin() {
           </Button>
         </CardHeader>
         <CardContent>
-          <div className="rounded-md border">
+          <div className="rounded-md border overflow-hidden">
             <Table>
               <TableHeader>
                 <TableRow>

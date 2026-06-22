@@ -149,7 +149,7 @@ export function AdminMilestones({ user }: { user: SessionUser }) {
           ) : milestones.length === 0 ? (
             <p className="text-sm text-muted-foreground py-8 text-center">No milestones yet. Create the first one.</p>
           ) : (
-            <div className="rounded-md border">
+            <div className="rounded-md border overflow-hidden">
               <Table>
                 <TableHeader>
                   <TableRow>

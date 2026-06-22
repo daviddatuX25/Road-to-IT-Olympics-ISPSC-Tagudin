@@ -92,7 +92,7 @@ export function ProcturedMocksView({ user }: { user: SessionUser }) {
           ) : mocks.length === 0 ? (
             <p className="text-sm text-muted-foreground py-8 text-center">No proctored mocks recorded yet.</p>
           ) : (
-            <div className="rounded-md border">
+            <div className="rounded-md border overflow-hidden">
               <Table>
                 <TableHeader>
                   <TableRow>

@@ -175,7 +175,7 @@ export function UsersAdmin() {
                 </div>
               )}
 
-              <div className="rounded-md border">
+              <div className="rounded-md border overflow-hidden">
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -347,7 +347,7 @@ export function UsersAdmin() {
                   <p className="text-xs text-muted-foreground/80">When students self-register, their requests will appear here.</p>
                 </div>
               ) : (
-                <div className="rounded-md border">
+                <div className="rounded-md border overflow-hidden">
                   <Table>
                     <TableHeader>
                       <TableRow>
