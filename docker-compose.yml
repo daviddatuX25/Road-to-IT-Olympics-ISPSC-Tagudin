@@ -10,16 +10,18 @@ services:
       - NODE_ENV=production
       - HOSTNAME=0.0.0.0
       - PORT=3000
-      # HMAC secret for session cookies. CHANGE THIS for production.
-      # If unset, a random one is generated per restart (sessions won't survive).
-      - SESSION_SECRET=dev-only-change-me-in-prod-32chars-min!!
-      # Use the persistent DB from the mounted volume (NOT the read-only baked one).
+      - SESSION_SECRET=${SESSION_SECRET:-dev-only-change-me-in-prod-32chars-min!!}
       - DATABASE_URL=file:/app/db/custom.db
-      # Discord webhook URL — generate in: Server Settings → Integrations → Webhooks
-      # Never hardcode the real token here; use a .env file or secrets manager.
       - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL:-}
-      # Public app URL used in "Open the app" buttons in Discord embeds.
       - APP_PUBLIC_URL=${APP_PUBLIC_URL:-http://localhost:3000}
+      - ADMIN_EMAIL=${ADMIN_EMAIL:-}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
+      - ADMIN_REALNAME=${ADMIN_REALNAME:-}
+      - ADMIN_NICKNAME=${ADMIN_NICKNAME:-}
+      - RESEND_API_KEY=${RESEND_API_KEY:-}
+      - RESEND_FROM_EMAIL=${RESEND_FROM_EMAIL:-}
+      - NEXT_PUBLIC_DISCORD_INVITE_URL=${NEXT_PUBLIC_DISCORD_INVITE_URL:-}
+      - COOKIE_SECURE=${COOKIE_SECURE:-}
     volumes:
       # Persistent DB so data survives image rebuilds.
       - rio-db:/app/db
