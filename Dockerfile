@@ -54,6 +54,7 @@ ENV PORT=3000
 COPY --from=builder /app/.next/standalone ./next-service-dist
 COPY --from=builder /app/db               ./db
 COPY --from=builder /app/prisma           ./prisma
+COPY --from=builder /app/scripts          ./scripts
 
 COPY Caddyfile          ./Caddyfile
 COPY .zscripts/start.sh ./start.sh
