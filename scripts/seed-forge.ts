@@ -1,8 +1,19 @@
 import { PrismaClient } from '@prisma/client'
 import * as fs from 'fs'
 import * as path from 'path'
+import crypto from 'node:crypto'
 
 const db = new PrismaClient()
+
+const SALT_LEN = 16
+const KEY_LEN = 32
+const SCRYPT_N = 16384
+
+function hashPassword(password: string): string {
+  const salt = crypto.randomBytes(SALT_LEN)
+  const hash = crypto.scryptSync(password, salt, KEY_LEN, { N: SCRYPT_N })
+  return `scrypt$${salt.toString('base64')}$${hash.toString('base64')}`
+}
 
 // Precomputed scrypt hash for password "olypmics2026" (format: scrypt$<salt-b64>$<hash-b64>)
 const passwordHash =
@@ -180,15 +191,22 @@ async function main() {
     })
   }
 
+  const adminEmail = process.env.ADMIN_EMAIL || 'admin@ito.test'
+  const adminRawPassword = process.env.ADMIN_PASSWORD
+  const adminPasswordHash = adminRawPassword ? hashPassword(adminRawPassword) : passwordHash
+  const adminRealName = process.env.ADMIN_REALNAME || 'Mara Santos'
+  const adminNickname = process.env.ADMIN_NICKNAME || 'Capt. Mara'
+
   const admin = await db.user.create({
     data: {
-      email: 'admin@ito.test',
-      passwordHash,
+      email: adminEmail,
+      passwordHash: adminPasswordHash,
       role: 'admin',
-      nickname: 'Capt. Mara',
-      realName: 'Mara Santos',
+      nickname: adminNickname,
+      realName: adminRealName,
       studentId: 'ADMIN-001',
       avatarId: 'avatar-09',
+      status: 'active',
     },
   })
 
