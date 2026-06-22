@@ -51,7 +51,6 @@ export function PendingShell({
   }
 
   const avatar = getAvatar(user.avatarId)
-  const isRejected = user.status === 'rejected'
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
@@ -80,7 +79,9 @@ export function PendingShell({
               <div className="hidden sm:block text-left">
                 <div className="text-xs font-medium leading-tight">{user.nickname}</div>
                 <div className="text-[10px] text-muted-foreground capitalize leading-tight">
-                  {user.status === 'pending' ? 'Pending Approval' : 'Rejected'}
+                  {user.status === 'pending' ? 'Pending Approval' :
+                   user.status === 'suspended' ? 'Suspended' :
+                   user.status === 'archived' ? 'Archived' : 'Rejected'}
                 </div>
               </div>
             </div>
@@ -100,13 +101,33 @@ export function PendingShell({
       {/* Main Content */}
       <main className="flex-1 p-4 sm:p-6 max-w-7xl w-full mx-auto space-y-6">
         {/* Banner */}
-        {isRejected ? (
+        {user.status === 'rejected' ? (
           <div className="border border-destructive/20 rounded-xl p-4 sm:p-5 bg-destructive/5 text-destructive flex gap-3 items-start shadow-sm animate-in fade-in duration-300">
             <AlertTriangle className="size-5 shrink-0 mt-0.5" />
             <div className="space-y-1">
               <h4 className="font-semibold text-sm leading-none">Registration Not Approved</h4>
               <p className="text-xs text-muted-foreground leading-relaxed">
                 Your application to join the IT Olympics training portal was not approved. Please contact a domain instructor or system administrator if you believe this is in error.
+              </p>
+            </div>
+          </div>
+        ) : user.status === 'suspended' ? (
+          <div className="border border-destructive/20 rounded-xl p-4 sm:p-5 bg-destructive/5 text-destructive flex gap-3 items-start shadow-sm animate-in fade-in duration-300">
+            <AlertTriangle className="size-5 shrink-0 mt-0.5" />
+            <div className="space-y-1">
+              <h4 className="font-semibold text-sm leading-none">Account Suspended</h4>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                Your account has been suspended by an administrator. You will not be able to perform training actions or access active materials. Please contact an instructor if you believe this is in error.
+              </p>
+            </div>
+          </div>
+        ) : user.status === 'archived' ? (
+          <div className="border border-destructive/20 rounded-xl p-4 sm:p-5 bg-destructive/5 text-destructive flex gap-3 items-start shadow-sm animate-in fade-in duration-300">
+            <AlertTriangle className="size-5 shrink-0 mt-0.5" />
+            <div className="space-y-1">
+              <h4 className="font-semibold text-sm leading-none">Account Archived</h4>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                Your account has been archived. You will not be able to perform training actions or access active materials.
               </p>
             </div>
           </div>

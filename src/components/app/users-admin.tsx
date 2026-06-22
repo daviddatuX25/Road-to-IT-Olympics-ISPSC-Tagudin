@@ -133,12 +133,17 @@ export function UsersAdmin() {
                       variant="outline"
                       className="text-xs bg-card h-8 hover:bg-muted text-destructive border-destructive/20 hover:bg-destructive/10"
                       onClick={async () => {
-                        const r = await api.bulkUpdateUserStatusAction(selectedUserIds, 'suspended')
-                        if (r.ok) {
-                          toast.success('Successfully suspended users.')
-                          void load()
-                        } else {
-                          toast.error(r.error)
+                        try {
+                          const r = await api.bulkUpdateUserStatusAction(selectedUserIds, 'suspended')
+                          if (r.ok) {
+                            toast.success('Successfully suspended users.')
+                            setSelectedUserIds([])
+                            void load()
+                          } else {
+                            toast.error(r.error)
+                          }
+                        } catch (err: any) {
+                          toast.error(err.message || 'Failed to suspend users.')
                         }
                       }}
                     >
@@ -150,12 +155,17 @@ export function UsersAdmin() {
                       className="text-xs h-8"
                       onClick={async () => {
                         if (!confirm(`Delete ${selectedUserIds.length} users? This removes all submissions and is completely irreversible.`)) return
-                        const r = await api.bulkDeleteUsersAction(selectedUserIds)
-                        if (r.ok) {
-                          toast.success('Successfully deleted users.')
-                          void load()
-                        } else {
-                          toast.error(r.error)
+                        try {
+                          const r = await api.bulkDeleteUsersAction(selectedUserIds)
+                          if (r.ok) {
+                            toast.success('Successfully deleted users.')
+                            setSelectedUserIds([])
+                            void load()
+                          } else {
+                            toast.error(r.error)
+                          }
+                        } catch (err: any) {
+                          toast.error(err.message || 'Failed to delete users.')
                         }
                       }}
                     >

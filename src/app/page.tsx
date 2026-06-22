@@ -417,8 +417,8 @@ export default function Home() {
     )
   }
 
-  // Active status checks: pendings go to PendingShell
-  if (user.status === 'pending' || user.status === 'rejected') {
+  // Active status checks: non-active users go to PendingShell
+  if (user.status !== 'active') {
     return (
       <PendingShell
         user={user}

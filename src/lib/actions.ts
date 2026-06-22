@@ -284,45 +284,108 @@ export async function bulkUpdateUserStatusAction(
   userIds: string[],
   status: 'active' | 'pending' | 'rejected' | 'suspended' | 'archived'
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  const admin = await requireRole('admin')
-  if (!userIds || userIds.length === 0) {
-    return { ok: false, error: 'No user IDs specified.' }
-  }
-  const validStatuses = ['active', 'pending', 'rejected', 'suspended', 'archived']
-  if (!validStatuses.includes(status)) {
-    return { ok: false, error: 'Invalid status.' }
-  }
-  // Prevent admin from archiving or suspending themselves
-  const filteredIds = userIds.filter(id => id !== admin.id)
-  if (filteredIds.length === 0) {
-    return { ok: false, error: 'No valid user accounts to modify.' }
-  }
+  try {
+    const admin = await requireRole('admin')
+    if (!userIds || userIds.length === 0) {
+      return { ok: false, error: 'No user IDs specified.' }
+    }
+    const validStatuses = ['active', 'pending', 'rejected', 'suspended', 'archived']
+    if (!validStatuses.includes(status)) {
+      return { ok: false, error: 'Invalid status.' }
+    }
+    // Prevent admin from archiving or suspending themselves
+    const filteredIds = userIds.filter(id => id !== admin.id)
+    if (filteredIds.length === 0) {
+      return { ok: false, error: 'No valid user accounts to modify.' }
+    }
 
-  await db.user.updateMany({
-    where: { id: { in: filteredIds } },
-    data: { status }
-  })
+    await db.user.updateMany({
+      where: { id: { in: filteredIds } },
+      data: { status }
+    })
 
-  revalidatePath('/')
-  return { ok: true }
+    revalidatePath('/')
+    return { ok: true }
+  } catch (err: any) {
+    console.error('Failed bulk updating user status:', err)
+    return { ok: false, error: err.message || 'Failed to update user status.' }
+  }
 }
 
 export async function bulkDeleteUsersAction(userIds: string[]): Promise<{ ok: true } | { ok: false; error: string }> {
-  const admin = await requireRole('admin')
-  if (!userIds || userIds.length === 0) {
-    return { ok: false, error: 'No user IDs specified.' }
-  }
-  const filteredIds = userIds.filter(id => id !== admin.id)
-  if (filteredIds.length === 0) {
-    return { ok: false, error: 'No valid user accounts to delete.' }
-  }
+  try {
+    const admin = await requireRole('admin')
+    if (!userIds || userIds.length === 0) {
+      return { ok: false, error: 'No user IDs specified.' }
+    }
+    const filteredIds = userIds.filter(id => id !== admin.id)
+    if (filteredIds.length === 0) {
+      return { ok: false, error: 'No valid user accounts to delete.' }
+    }
 
-  await db.user.deleteMany({
-    where: { id: { in: filteredIds } }
-  })
+    // Check if any of these users created a milestone
+    const milestoneAuthorCount = await db.milestone.count({
+      where: { createdBy: { in: filteredIds } }
+    })
+    if (milestoneAuthorCount > 0) {
+      return { ok: false, error: 'Cannot delete users who have authored milestones. Please delete or reassign those milestones first.' }
+    }
 
-  revalidatePath('/')
-  return { ok: true }
+    // Run cascade delete inside transaction
+    await db.$transaction(async (tx) => {
+      // 1. Delete DomainCaptains
+      await tx.domainCaptain.deleteMany({ where: { userId: { in: filteredIds } } })
+      
+      // 2. Delete Submissions
+      await tx.submission.deleteMany({ where: { userId: { in: filteredIds } } })
+
+      // 3. Delete ProctoredMocks (as subject, partner, or enteredBy)
+      await tx.proctoredMock.deleteMany({
+        where: {
+          OR: [
+            { userId: { in: filteredIds } },
+            { pairPartnerId: { in: filteredIds } },
+            { enteredById: { in: filteredIds } }
+          ]
+        }
+      })
+
+      // 4. Delete TeamSelections (as selected user or decidedBy)
+      await tx.teamSelection.deleteMany({
+        where: {
+          OR: [
+            { userId: { in: filteredIds } },
+            { decidedById: { in: filteredIds } }
+          ]
+        }
+      })
+
+      // 5. Delete WeeklySpotlights
+      await tx.weeklySpotlight.deleteMany({ where: { userId: { in: filteredIds } } })
+
+      // 6. Delete CandidateEvaluations (as subject, partner, or evaluator)
+      await tx.candidateEvaluation.deleteMany({
+        where: {
+          OR: [
+            { userId: { in: filteredIds } },
+            { pairedWithUserId: { in: filteredIds } },
+            { evaluatedBy: { in: filteredIds } }
+          ]
+        }
+      })
+
+      // 7. Finally delete the users
+      await tx.user.deleteMany({
+        where: { id: { in: filteredIds } }
+      })
+    })
+
+    revalidatePath('/')
+    return { ok: true }
+  } catch (err: any) {
+    console.error('Failed bulk deleting users:', err)
+    return { ok: false, error: err.message || 'Failed to bulk delete users.' }
+  }
 }
 
 export async function assignCaptainAction(userId: string, domainId: string): Promise<{ ok: true } | { ok: false; error: string }> {
