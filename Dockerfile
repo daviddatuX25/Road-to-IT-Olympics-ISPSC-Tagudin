@@ -55,6 +55,8 @@ COPY --from=builder /app/.next/standalone ./next-service-dist
 COPY --from=builder /app/db               ./db
 COPY --from=builder /app/prisma           ./prisma
 COPY --from=builder /app/scripts          ./scripts
+COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
+COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 
 COPY Caddyfile          ./Caddyfile
 COPY .zscripts/start.sh ./start.sh
