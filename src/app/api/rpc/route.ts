@@ -159,8 +159,18 @@ export async function POST(req: NextRequest) {
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error'
     const stack = err instanceof Error ? err.stack : undefined
-    console.error('[RPC] action', actionName, 'threw:', message, stack)
-    const status = message === 'NOT_AUTHENTICATED' ? 401 : message === 'FORBIDDEN' ? 403 : 500
+    
+    if (message === 'ACCOUNT_PENDING' || message === 'NOT_AUTHENTICATED' || message === 'FORBIDDEN') {
+      console.warn(`[RPC] action ${actionName} validation failed: ${message}`)
+    } else {
+      console.error('[RPC] action', actionName, 'threw:', message, stack)
+    }
+
+    const status = message === 'NOT_AUTHENTICATED' 
+      ? 401 
+      : (message === 'FORBIDDEN' || message === 'ACCOUNT_PENDING') 
+        ? 403 
+        : 500
     return NextResponse.json({ ok: false, error: message }, { status })
   }
 }

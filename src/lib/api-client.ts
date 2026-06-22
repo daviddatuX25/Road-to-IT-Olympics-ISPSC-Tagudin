@@ -63,6 +63,20 @@ export async function fetchRpc<T>(action: string, args: unknown[]): Promise<T> {
     throw new Error('Network error talking to the server.')
   }
   if (!json.ok) {
+    if (json.error === 'ACCOUNT_PENDING' && typeof window !== 'undefined') {
+      // Heal the cache and redirect/refresh
+      void idb.get<any>('rpc-cache', 'current-user')
+        .then(async (userCache) => {
+          if (userCache && userCache.data) {
+            userCache.data.status = 'pending'
+            await idb.set('rpc-cache', 'current-user', userCache)
+          }
+          window.location.href = '/'
+        })
+        .catch(() => {
+          window.location.href = '/'
+        })
+    }
     throw new Error(json.error)
   }
   return json.data

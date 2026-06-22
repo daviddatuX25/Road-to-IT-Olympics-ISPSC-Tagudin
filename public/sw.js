@@ -36,6 +36,11 @@ self.addEventListener('activate', event => {
 self.addEventListener('fetch', event => {
   const url = new URL(event.request.url);
 
+  // Skip non-http/https protocols (e.g. chrome-extension://, data:, etc.)
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+    return;
+  }
+
   // 1. Skip /api/health (always go to network)
   if (url.pathname === '/api/health') {
     return;
@@ -92,10 +97,16 @@ self.addEventListener('fetch', event => {
             });
           }
           return networkResponse;
-        }).catch(() => {
-          // Silently catch fetch errors (when offline)
         });
-        return cachedResponse || fetchPromise;
+
+        if (cachedResponse) {
+          // Serve from cache immediately, update in background
+          fetchPromise.catch(() => {});
+          return cachedResponse;
+        }
+
+        // Return fetchPromise directly if no cached version is available
+        return fetchPromise;
       })
     );
   }
