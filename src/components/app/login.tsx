@@ -11,8 +11,8 @@ import { toast } from 'sonner'
 import { RegistrationForm } from './registration-form'
 
 export function Login({ onLogin }: { onLogin: () => void }) {
-  const [identifier, setIdentifier] = useState('2024-001')
-  const [password, setPassword] = useState('olypmics2026')
+  const [identifier, setIdentifier] = useState('')
+  const [password, setPassword] = useState('')
   const [mode, setMode] = useState<'signin' | 'register'>('signin')
   const [pending, setPending] = useState(false)
 
@@ -56,8 +56,7 @@ export function Login({ onLogin }: { onLogin: () => void }) {
           <CardHeader className="px-0 pt-0">
             <CardTitle className="text-xl font-bold tracking-tight">Sign in to Road to IT Olympics</CardTitle>
             <CardDescription>
-              Use one of the seeded accounts to explore the platform. Password for all demo accounts:{' '}
-              <code className="text-foreground bg-muted px-1.5 py-0.5 rounded text-xs font-semibold">olypmics2026</code>
+              Enter your credentials below to access the platform.
             </CardDescription>
           </CardHeader>
           <CardContent className="px-0 pb-0">
@@ -69,7 +68,7 @@ export function Login({ onLogin }: { onLogin: () => void }) {
                   type="text"
                   value={identifier}
                   onChange={(e) => setIdentifier(e.target.value)}
-                  placeholder="e.g. 2024-001, email@ispsc.edu.ph, FAC-001"
+                  placeholder="Enter your Email or Student ID"
                   required
                 />
               </div>
@@ -85,6 +84,7 @@ export function Login({ onLogin }: { onLogin: () => void }) {
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••"
                   autoComplete="current-password"
                   required
                 />
