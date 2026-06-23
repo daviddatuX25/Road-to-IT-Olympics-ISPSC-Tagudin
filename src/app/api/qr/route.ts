@@ -27,7 +27,7 @@ export async function GET() {
       status: res.status,
       headers: {
         'content-type': contentType,
-        cache-control: 'no-store'
+        'cache-control': 'no-store'
       }
     })
   } catch (error) {

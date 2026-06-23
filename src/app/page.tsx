@@ -22,10 +22,14 @@ import {
   Sparkles,
   LogIn,
   ChevronRight,
-  Star
+  Star,
+  Copy,
+  Share2,
+  Check
 } from 'lucide-react'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
+import { toast } from 'sonner'
 
 // Discord SVG icon (not in lucide-react)
 function DiscordIcon({ className }: { className?: string }) {
@@ -43,6 +47,7 @@ export default function Home() {
   const [showLoginModal, setShowLoginModal] = useState(false)
   const [activeSeasonName, setActiveSeasonName] = useState<string>('')
   const [phases, setPhases] = useState<Array<{ label: string; shortLabel: string; sequence: number }>>([])
+  const [copied, setCopied] = useState(false)
 
   // Fetch session details on mount
   useEffect(() => {
@@ -260,15 +265,65 @@ export default function Home() {
               Explore Tracks
             </Button>
           </div>
-          <div className="mt-10 rounded-2xl border border-border/30 bg-background/60 backdrop-blur-md shadow-sm p-4 inline-flex flex-col items-center gap-3">
-            <img
-              src={qrUrl}
-              alt="App QR"
-              className="size-44 rounded-xl border border-border/30 bg-white"
-              width={176}
-              height={176}
-            />
-            <span className="text-[11px] text-muted-foreground font-medium">Scan to open</span>
+          <div className="mt-10 rounded-2xl border border-border/30 bg-background/60 backdrop-blur-md shadow-sm p-5 inline-flex flex-col items-center gap-4 max-w-xs w-full sm:w-auto">
+            <div className="relative group">
+              <img
+                src={qrUrl}
+                alt="App QR"
+                className="size-44 rounded-xl border border-border/30 bg-white p-1 transition-transform duration-300 group-hover:scale-[1.02]"
+                width={176}
+                height={176}
+              />
+            </div>
+            <div className="flex flex-col items-center gap-1">
+              <span className="text-xs font-semibold text-foreground">Scan to open platform</span>
+              <span className="text-[10px] text-muted-foreground">Or share link with your team</span>
+            </div>
+
+            <div className="w-full border-t border-border/20 pt-3 flex flex-col items-center gap-2">
+              <div className="flex items-center gap-1.5 bg-muted/50 dark:bg-muted/30 rounded-lg p-1 border border-border/30 w-full max-w-[220px]">
+                <span className="text-xs text-muted-foreground truncate pl-2 font-mono flex-1 select-all">
+                  {typeof window !== 'undefined' ? window.location.origin.replace(/^https?:\/\//, '') : 'rio.ispsc.edu'}
+                </span>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="size-7 rounded-md hover:bg-background/80 hover:text-foreground shrink-0 text-muted-foreground transition-colors"
+                  onClick={() => {
+                    const url = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000'
+                    navigator.clipboard.writeText(url)
+                    setCopied(true)
+                    toast.success('Link copied to clipboard!')
+                    setTimeout(() => setCopied(false), 2000)
+                  }}
+                  title="Copy link"
+                >
+                  {copied ? (
+                    <Check className="size-3.5 text-emerald-500 animate-in fade-in zoom-in-75 duration-200" />
+                  ) : (
+                    <Copy className="size-3.5 transition-transform duration-200 hover:scale-110" />
+                  )}
+                </Button>
+                {typeof navigator !== 'undefined' && navigator.share && (
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="size-7 rounded-md hover:bg-background/80 hover:text-foreground shrink-0 text-muted-foreground transition-colors"
+                    onClick={() => {
+                      const url = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000'
+                      navigator.share({
+                        title: 'Road to IT Olympics (ISPSC)',
+                        text: 'Practice platform for ISPSC Tagudin IT Skills Olympics selection pipeline.',
+                        url: url
+                      }).catch(() => {})
+                    }}
+                    title="Share link"
+                  >
+                    <Share2 className="size-3.5 transition-transform duration-200 hover:scale-110" />
+                  </Button>
+                )}
+              </div>
+            </div>
           </div>
         </section>
 
