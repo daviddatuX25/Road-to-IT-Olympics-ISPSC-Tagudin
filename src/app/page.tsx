@@ -55,6 +55,11 @@ export default function Home() {
       })
   }, [])
 
+  // Resolve QR code URL using NEXT_PUBLIC env or env URL.
+  const qrUrl = typeof window !== 'undefined'
+    ? `${window.location.origin}/api/qr`
+    : '/api/qr'
+
   // Fetch active season info for landing page branding
   useEffect(() => {
     api.getActiveSeasonAction()
@@ -254,6 +259,16 @@ export default function Home() {
             >
               Explore Tracks
             </Button>
+          </div>
+          <div className="mt-10 rounded-2xl border border-border/30 bg-background/60 backdrop-blur-md shadow-sm p-4 inline-flex flex-col items-center gap-3">
+            <img
+              src={qrUrl}
+              alt="App QR"
+              className="size-44 rounded-xl border border-border/30 bg-white"
+              width={176}
+              height={176}
+            />
+            <span className="text-[11px] text-muted-foreground font-medium">Scan to open</span>
           </div>
         </section>
 
