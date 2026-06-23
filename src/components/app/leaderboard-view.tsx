@@ -29,10 +29,12 @@ export function LeaderboardView({ currentUser }: { currentUser: SessionUser }) {
   return (
     <div className="space-y-4">
       <Tabs value={tab} onValueChange={(v) => setTab(v as 'streak' | 'assessment')}>
-        <TabsList>
-          <TabsTrigger value="streak"><Flame className="size-3.5 mr-1.5 text-orange-500" /> Streak &amp; Completion</TabsTrigger>
-          <TabsTrigger value="assessment"><Award className="size-3.5 mr-1.5 text-primary" /> Assessment Leaders</TabsTrigger>
-        </TabsList>
+        <div className="overflow-x-auto max-w-full">
+          <TabsList className="w-full sm:w-auto flex justify-start sm:justify-center">
+            <TabsTrigger value="streak" className="flex-1 sm:flex-initial shrink-0"><Flame className="size-3.5 mr-1.5 text-orange-500" /> Streak &amp; Completion</TabsTrigger>
+            <TabsTrigger value="assessment" className="flex-1 sm:flex-initial shrink-0"><Award className="size-3.5 mr-1.5 text-primary" /> Assessment Leaders</TabsTrigger>
+          </TabsList>
+        </div>
         <TabsContent value="streak">
           <StreakLeaderboard currentUser={currentUser} />
         </TabsContent>
@@ -159,29 +161,31 @@ function StreakLeaderboard({ currentUser }: { currentUser: SessionUser }) {
               <div
                 key={entry.userId}
                 className={cn(
-                  'flex items-center gap-3 p-2.5 rounded-md',
+                  'flex flex-col sm:flex-row sm:items-center justify-between p-2.5 gap-2 sm:gap-3 rounded-md',
                   isMe ? 'bg-primary/10 border border-primary/30' : 'hover:bg-accent/50',
                 )}
               >
-                <span className="text-xs font-mono w-6 text-muted-foreground text-right">{rank}</span>
-                <Avatar className="size-9 border">
-                  <AvatarFallback style={{ background: avatar.color, color: 'white' }} className="text-sm">{avatar.glyph}</AvatarFallback>
-                </Avatar>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <p className="text-sm font-medium truncate">{entry.nickname}</p>
-                    {isMe && <Badge variant="outline" className="text-[10px]">You</Badge>}
-                    {entry.isCaptain && <Badge variant="outline" className="text-[10px]">Captain</Badge>}
+                <div className="flex items-center gap-3 min-w-0 flex-1">
+                  <span className="text-xs font-mono w-6 text-muted-foreground text-right">{rank}</span>
+                  <Avatar className="size-9 border">
+                    <AvatarFallback style={{ background: avatar.color, color: 'white' }} className="text-sm">{avatar.glyph}</AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-medium truncate">{entry.nickname}</p>
+                      {isMe && <Badge variant="outline" className="text-[10px]">You</Badge>}
+                      {entry.isCaptain && <Badge variant="outline" className="text-[10px]">Captain</Badge>}
+                    </div>
+                    <p className="text-[11px] text-muted-foreground">{entry.weeksCompleted} weeks completed</p>
                   </div>
-                  <p className="text-[11px] text-muted-foreground">{entry.weeksCompleted} weeks completed</p>
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="flex items-center justify-end gap-3 pl-9 sm:pl-0">
                   {entry.thisWeekSubmitted && (
-                    <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-0 hover:bg-emerald-500/20">
+                    <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-0 hover:bg-emerald-500/20 shrink-0">
                       <CheckCircle2 className="size-3 mr-1" /> This week
                     </Badge>
                   )}
-                  <div className="flex items-center gap-1 text-orange-500 min-w-14 justify-end">
+                  <div className="flex items-center gap-1 text-orange-500 min-w-14 justify-end shrink-0">
                     <Flame className="size-3.5" />
                     <span className="text-sm font-mono tabular-nums">{entry.bestStreak}</span>
                   </div>
@@ -257,7 +261,7 @@ function AssessmentLeaderboard({ currentUser }: { currentUser: SessionUser }) {
         </CardHeader>
         <CardContent className="space-y-2">
           {topThree.length > 0 && (
-            <div className="grid gap-3 sm:grid-cols-3 mb-2">
+            <div className="grid gap-3 md:grid-cols-3 mb-2">
               {topThree.map((leader, idx) => {
                 const avatar = getAvatar(leader.avatarId)
                 const rank = idx + 1
@@ -293,30 +297,32 @@ function AssessmentLeaderboard({ currentUser }: { currentUser: SessionUser }) {
               <div
                 key={leader.userId}
                 className={cn(
-                  'flex items-center gap-3 p-2.5 rounded-md',
+                  'flex flex-col sm:flex-row sm:items-center justify-between p-2.5 gap-2.5 sm:gap-3 rounded-md',
                   isMe ? 'bg-primary/10 border border-primary/30' : 'hover:bg-accent/50',
                 )}
               >
-                <span className="text-xs font-mono w-6 text-muted-foreground text-right">{rank}</span>
-                <Avatar className="size-9 border">
-                  <AvatarFallback style={{ background: avatar.color, color: 'white' }} className="text-sm">{avatar.glyph}</AvatarFallback>
-                </Avatar>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <p className="text-sm font-medium truncate">{leader.nickname}</p>
-                    {isMe && <Badge variant="outline" className="text-[10px]">You</Badge>}
-                    {leader.isCaptain && <Badge variant="outline" className="text-[10px]">Captain</Badge>}
-                  </div>
-                  <div className="flex items-center gap-2 flex-wrap mt-0.5">
-                    {leader.perDomain.slice(0, 4).map(pd => (
-                      <span key={pd.domainKey} className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
-                        <span className="size-1.5 rounded-full" style={{ background: pd.domainColor }} />
-                        {pd.domainName.split(' ')[0]}: <span className="font-mono">{pd.totalScore}</span>
-                      </span>
-                    ))}
+                <div className="flex items-center gap-3 min-w-0 flex-1">
+                  <span className="text-xs font-mono w-6 text-muted-foreground text-right">{rank}</span>
+                  <Avatar className="size-9 border">
+                    <AvatarFallback style={{ background: avatar.color, color: 'white' }} className="text-sm">{avatar.glyph}</AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-medium truncate">{leader.nickname}</p>
+                      {isMe && <Badge variant="outline" className="text-[10px]">You</Badge>}
+                      {leader.isCaptain && <Badge variant="outline" className="text-[10px]">Captain</Badge>}
+                    </div>
+                    <div className="flex items-center gap-2 flex-wrap mt-0.5">
+                      {leader.perDomain.slice(0, 4).map(pd => (
+                        <span key={pd.domainKey} className="inline-flex items-center gap-1 text-[10px] text-muted-foreground whitespace-nowrap">
+                          <span className="size-1.5 rounded-full" style={{ background: pd.domainColor }} />
+                          {pd.domainName.split(' ')[0]}: <span className="font-mono">{pd.totalScore}</span>
+                        </span>
+                      ))}
+                    </div>
                   </div>
                 </div>
-                <div className="flex items-center gap-4 text-right">
+                <div className="flex items-center justify-end gap-4 text-right pl-9 sm:pl-0 shrink-0">
                   <div>
                     <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Total</p>
                     <p className="text-sm font-mono tabular-nums font-medium">{leader.totalScore}</p>

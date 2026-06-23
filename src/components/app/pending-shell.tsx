@@ -144,12 +144,12 @@ export function PendingShell({
         )}
 
         {/* Tab Selection */}
-        <div className="flex gap-2 border-b pb-2">
+        <div className="flex gap-2 border-b pb-2 overflow-x-auto flex-nowrap -mx-4 px-4 sm:mx-0 sm:px-0">
           <Button
             variant={activeTab === 'leaderboard' ? 'default' : 'ghost'}
             size="sm"
             onClick={() => setActiveTab('leaderboard')}
-            className="flex items-center gap-1.5"
+            className="flex items-center gap-1.5 shrink-0"
           >
             <Trophy className="size-4" />
             Leaderboard
@@ -158,7 +158,7 @@ export function PendingShell({
             variant={activeTab === 'help' ? 'default' : 'ghost'}
             size="sm"
             onClick={() => setActiveTab('help')}
-            className="flex items-center gap-1.5"
+            className="flex items-center gap-1.5 shrink-0"
           >
             <HelpCircle className="size-4" />
             Tutorial & Help
